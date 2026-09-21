@@ -21,7 +21,7 @@ A Causal Temporal--Graph Architecture for Cross-Sectional Asset Ranking}
 \begin{abstract}
 Cross-sectional return prediction is fundamentally a ranking problem: the practical question is often not the exact magnitude of an individual asset's future return, but whether a model can distinguish relatively stronger from relatively weaker assets over a specified investment horizon. This paper develops and evaluates the Relational Asset Network (RAN), a compact neural architecture designed for that setting. RAN combines a causal dilated temporal convolutional encoder with a dynamically constructed correlation graph over assets. Each asset is represented by a 60-session history of 57 causal features. Three one-dimensional convolutions with kernel size three and dilations one, two, and four form the temporal representation; a ten-nearest-neighbour correlation graph then allows the asset representations to exchange information through a residual graph convolution. A shared linear head produces a cross-sectional score for every asset.
 
-The empirical study is based on the supplied research implementation and its saved development-stage outputs. The data are real adjusted OHLCV observations retrieved through the \texttt{yfinance} interface to Yahoo Finance. The evaluated universe contains 56 liquid US-listed ETFs spanning seven asset classes and 3,657 common observations from 24 June 2008 through 30 December 2022. The experimental design uses chronological walk-forward estimation, a one-session execution lag, purged training and validation samples, training-window-only feature normalization, five-seed model averaging, overlapping-label-aware Newey--West inference, stationary bootstrap confidence intervals, paired bootstrap comparisons, permutation tests, and Holm adjustment of the model--horizon testing family. The primary ten-, twenty-, and sixty-session RAN configurations obtain mean rank ICs of 0.0923, 0.1159, and 0.0807, respectively. Under the supplied 5-basis-point transaction-cost and 50-basis-point annual short-borrow assumptions, their net Sharpe ratios are 0.556, 0.521, and 0.156.
+The empirical study is based on the supplied research implementation and its saved development-stage outputs. The primary data are real adjusted OHLCV observations retrieved through the \texttt{yfinance} interface to Yahoo Finance. The primary evaluated universe contains 56 liquid US-listed ETFs spanning seven asset classes and 3,657 common observations from 24 June 2008 through 30 December 2022. A separate S\&P 500 development run retains 383 equities, 4,411 common dates, and 11 sector groups through 30 December 2022, providing a second universe in which to examine the same specification. The experimental design uses chronological walk-forward estimation, a one-session execution lag, purged training and validation samples, training-window-only feature normalization, five-seed model averaging, overlapping-label-aware Newey--West inference, stationary bootstrap confidence intervals, paired bootstrap comparisons, permutation tests, and Holm adjustment of the model--horizon testing family. The primary ten-, twenty-, and sixty-session RAN configurations obtain mean rank ICs of 0.0923, 0.1159, and 0.0807, respectively. Under the supplied 5-basis-point transaction-cost and 50-basis-point annual short-borrow assumptions, their net Sharpe ratios are 0.556, 0.521, and 0.156.
 
 The results provide evidence that the complete RAN pipeline produces a positive cross-sectional ranking signal in the supplied development period. They do not, however, establish that the graph component is responsible for that performance: the no-graph ablation is statistically close to the full model at ten and twenty sessions. Nor do they establish post-2023 out-of-sample performance, because the supplied archive contains the development stage but not the configured frozen final-stage results. The paper therefore treats RAN as a reproducible empirical research system and identifies the untouched holdout, point-in-time universe construction, and more realistic execution modeling as necessary subsequent tests.
 \end{abstract}
@@ -936,7 +936,7 @@ The results also emphasize the importance of simple baselines. Ridge has positiv
 
 This paper has formalized RAN as a causal temporal--graph model for cross-sectional asset ranking. The architecture begins with 57 causal features calculated from real adjusted OHLCV data, encodes each asset's recent 60-session history through a three-layer dilated convolutional network, constructs a ten-neighbour rolling correlation graph, aggregates information through a residual graph convolution, and produces a scalar score used to form a dollar-neutral long--short portfolio.
 
-The supplied development experiment covers 56 assets and 3,657 common sessions from June 2008 through December 2022. Under the specified five-basis-point transaction cost and fifty-basis-point annual borrow assumption, the ten-, twenty-, and sixty-session RAN configurations produce net Sharpe ratios of 0.556, 0.521, and 0.156, respectively. Mean rank IC is highest at twenty sessions, at 0.1159. The results remain positive over a range of transaction-cost assumptions, although the magnitude declines as costs increase.
+The supplied development experiment covers 56 assets and 3,657 common sessions from June 2008 through December 2022. Under the specified five-basis-point transaction cost and fifty-basis-point annual borrow assumption, the ten-, twenty-, and sixty-session RAN configurations produce net Sharpe ratios of 0.556, 0.521, and 0.156, respectively. A separate S\&P 500 development run covers 383 retained equities and 4,411 common dates; its corresponding raw RAN net Sharpe ratios are 0.494, 0.385, and 0.164, with Holm-adjusted IC probabilities of 0.435, 0.712, and 1.000. This second experiment therefore provides a materially different empirical context without being treated as an out-of-sample holdout. Mean rank IC is highest at twenty sessions, at 0.1159. The results remain positive over a range of transaction-cost assumptions, although the magnitude declines as costs increase.
 
 The strongest methodological conclusion is not that RAN has discovered a permanent trading edge. It is that the experiment provides a reproducible, explicitly causal framework in which such a claim can be tested. The no-graph ablation demonstrates that the present evidence does not isolate the graph as the source of predictive power. The stress tests demonstrate horizon-dependent behavior. The cost analysis demonstrates economic sensitivity. The development/final separation demonstrates that the supplied experiment was designed to permit an untouched holdout, but the absence of a saved final run prevents that test from being claimed here.
 
@@ -1045,6 +1045,437 @@ The recorded computational environment is Python 3.13.15 on Linux 6.6.122, NumPy
 \section{Figure Reading Guide}
 
 The cumulative-return figure answers the question of how the strategy's realized capital trajectory evolved. The Sharpe forest plot answers how the estimated risk-adjusted performance compares across configurations while displaying uncertainty. The cost-sensitivity figure asks how much of the result survives when execution friction is increased. The annual and rolling IC figures ask whether the predictive relationship is temporally stable. The decile figure asks whether the score contains information throughout the cross-section rather than only at its extremes. The permutation figure asks whether the portfolio statistic is unusual under a within-date exchangeability null. Together, these figures are intended to prevent the results section from relying on a single headline statistic.
+
+\clearpage
+\section{Cross-Sectional Replication on the S\&P 500 Universe}
+
+To examine whether the development result depends on the heterogeneous multi-asset ETF universe, the same research implementation was run separately on an S\&P 500 equity universe. This is a second development-stage experiment, not an independent final holdout. The run used the identical model family, feature construction, walk-forward protocol, costs, horizons, five-seed averaging, bootstrap procedures, and permutation tests. The universe construction began from the S\&P 500 constituent list available to the implementation, downloaded price histories for 501 symbols, and retained 383 instruments after the historical-coverage filter. The resulting common panel contains 4,411 dates from 24 June 2005 through 30 December 2022 and 11 sector groups. The development stage again stops before the configured 1 January 2023 holdout.
+
+The change in universe materially changes the empirical setting. The multi-asset experiment asks whether a model can rank instruments across distinct asset classes, whereas the S\&P 500 experiment asks whether the same representation remains informative inside a large, predominantly equity cross-section. The latter universe also has substantially more assets per date, making the graph and ranking problem larger while reducing the cross-asset heterogeneity present in the primary experiment.
+
+Table~\ref{tab:sp500summary} summarizes the primary S\&P 500 RAN results. At the ten-session horizon, the raw RAN score has rank IC 0.0157, Newey--West $t=1.80$, net Sharpe 0.494, annualized return 4.50 percent, annualized volatility 9.10 percent, turnover 0.240, and maximum drawdown -16.03 percent. At twenty sessions the corresponding rank IC is 0.0157 and net Sharpe is 0.385. At sixty sessions the rank IC falls to 0.0065 and net Sharpe to 0.164. Unlike the primary multi-asset experiment, the Holm-adjusted IC probabilities for the three raw RAN horizons are not below conventional significance thresholds in this S\&P 500 development run.
+
+\begin{table}[tbp]
+\centering\small
+\caption{Primary RAN results on the S\&P 500 development universe.}
+\label{tab:sp500summary}
+\begin{tabular}{rrrrrrrrr}
+\toprule
+$H$ & IC & ICIR & $t_{NW}$ & Holm $p$ & Gross SR & Net SR & Ann. Ret. & Max DD\\
+\midrule
+10 & 0.0157 & 0.0796 & 1.80 & 0.4354 & 0.588 & 0.494 & 4.50\% & -16.03\%\\
+20 & 0.0157 & 0.0784 & 1.27 & 0.7118 & 0.467 & 0.385 & 3.51\% & -18.37\%\\
+60 & 0.0065 & 0.0334 & 0.34 & 1.0000 & 0.226 & 0.164 & 1.43\% & -13.37\%\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The S\&P 500 result therefore provides a useful replication boundary rather than a simple extension of the primary finding. The model continues to generate positive aggregate net Sharpe ratios under the supplied portfolio and cost construction, but the cross-sectional ranking statistics are much smaller than in the heterogeneous multi-asset experiment and do not survive the reported Holm correction. This distinction is retained throughout the paper rather than treating the two universes as interchangeable evidence.
+
+\subsection{Complete S\&P 500 Model Comparison}
+
+The full S\&P 500 result matrix is reproduced below using the saved \texttt{main\_results\_full.csv}. As in the primary experiment, both raw and sector-neutral variants are retained, together with the graph ablation and conventional ranking controls.
+
+\begingroup\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{longtable}{rrlrrrrr}
+\caption{Complete S\&P 500 predictive statistics from main\_results\_full.csv}\label{tab:sp500pred}\\
+\toprule
+Horizon & Model & Variant & Rank IC & NW $t$ & $p$ & Holm $p$ & ICIR \\
+\midrule
+\endfirsthead
+\toprule
+Horizon & Model & Variant & Rank IC & NW $t$ & $p$ & Holm $p$ & ICIR \\
+\midrule
+\endhead
+10 & RAN (CNN+GCN) & raw & 0.0157 & 1.7956 & 0.03628 & 0.4354 & 0.0796 \\
+10 & RAN (CNN+GCN) & sector-neutral & 0.0094 & 1.7451 & 0.04048 & -- & 0.0770 \\
+10 & RAN w/o graph & raw & 0.0150 & 1.7090 & 0.04372 & 0.481 & 0.0761 \\
+10 & RAN w/o graph & sector-neutral & 0.0093 & 1.7152 & 0.04316 & -- & 0.0761 \\
+10 & Ridge & raw & 0.0141 & 1.6940 & 0.04513 & 0.481 & 0.0717 \\
+10 & Ridge & sector-neutral & 0.0094 & 1.6456 & 0.04992 & -- & 0.0701 \\
+10 & Momentum (120-20d) & raw & -0.0020 & -0.2313 & 0.5915 & 1 & -0.0100 \\
+10 & Momentum (120-20d) & sector-neutral & 0.0006 & 0.0943 & 0.4624 & -- & 0.0041 \\
+10 & Reversal (5d) & raw & 0.0125 & 2.3090 & 0.01047 & 0.1571 & 0.0752 \\
+10 & Reversal (5d) & sector-neutral & 0.0123 & 3.2805 & 0.0005181 & -- & 0.1094 \\
+10 & Random & raw & 0.0003 & 0.3251 & 0.3725 & -- & 0.0057 \\
+10 & Random & sector-neutral & 0.0000 & 0.0290 & 0.4884 & -- & 0.0005 \\
+20 & RAN (CNN+GCN) & raw & 0.0157 & 1.2720 & 0.1017 & 0.7118 & 0.0784 \\
+20 & RAN (CNN+GCN) & sector-neutral & 0.0085 & 1.0727 & 0.1417 & -- & 0.0663 \\
+20 & RAN w/o graph & raw & 0.0128 & 1.0638 & 0.1437 & 0.8623 & 0.0657 \\
+20 & RAN w/o graph & sector-neutral & 0.0080 & 1.0341 & 0.1505 & -- & 0.0638 \\
+20 & Ridge & raw & 0.0202 & 1.6904 & 0.04548 & 0.481 & 0.1007 \\
+20 & Ridge & sector-neutral & 0.0119 & 1.5087 & 0.06569 & -- & 0.0887 \\
+20 & Momentum (120-20d) & raw & -0.0074 & -0.6818 & 0.7523 & 1 & -0.0405 \\
+20 & Momentum (120-20d) & sector-neutral & -0.0044 & -0.5590 & 0.7119 & -- & -0.0331 \\
+20 & Reversal (5d) & raw & 0.0130 & 2.3053 & 0.01057 & 0.1571 & 0.0815 \\
+20 & Reversal (5d) & sector-neutral & 0.0119 & 2.9179 & 0.001762 & -- & 0.1112 \\
+20 & Random & raw & -0.0001 & -0.0779 & 0.5311 & -- & -0.0013 \\
+20 & Random & sector-neutral & 0.0002 & 0.2058 & 0.4185 & -- & 0.0035 \\
+60 & RAN (CNN+GCN) & raw & 0.0065 & 0.3412 & 0.3665 & 1 & 0.0334 \\
+60 & RAN (CNN+GCN) & sector-neutral & 0.0069 & 0.5306 & 0.2978 & -- & 0.0519 \\
+60 & RAN w/o graph & raw & 0.0091 & 0.5081 & 0.3057 & 1 & 0.0501 \\
+60 & RAN w/o graph & sector-neutral & 0.0088 & 0.7277 & 0.2334 & -- & 0.0724 \\
+60 & Ridge & raw & 0.0319 & 1.5894 & 0.05599 & 0.481 & 0.1583 \\
+60 & Ridge & sector-neutral & 0.0195 & 1.4486 & 0.07372 & -- & 0.1437 \\
+60 & Momentum (120-20d) & raw & -0.0158 & -1.0873 & 0.8615 & 1 & -0.0974 \\
+60 & Momentum (120-20d) & sector-neutral & -0.0106 & -0.9798 & 0.8364 & -- & -0.0892 \\
+60 & Reversal (5d) & raw & 0.0125 & 2.2075 & 0.01364 & 0.1773 & 0.0826 \\
+60 & Reversal (5d) & sector-neutral & 0.0095 & 2.2556 & 0.01205 & -- & 0.0939 \\
+60 & Random & raw & 0.0010 & 1.1629 & 0.1224 & -- & 0.0197 \\
+60 & Random & sector-neutral & 0.0010 & 1.2766 & 0.1009 & -- & 0.0212 \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\begingroup\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{longtable}{rrlrrrrrrrrrr}
+\caption{Complete S\&P 500 portfolio and sample statistics from main\_results\_full.csv}\label{tab:sp500port}\\
+\toprule
+Horizon & Model & Variant & Gross SR & Net SR & CI low & CI high & PSR & Ann. ret. & Ann. vol. & Turnover & Max DD\\
+\midrule
+\endfirsthead
+\toprule
+Horizon & Model & Variant & Gross SR & Net SR & CI low & CI high & PSR & Ann. ret. & Ann. vol. & Turnover & Max DD\\
+\midrule
+\endhead
+10 & RAN (CNN+GCN) & raw & 0.5883 & 0.4943 & 0.0371 & 0.9623 & 0.9555 & 4.50\% & 9.10\% & 0.2398 & -16.03\% \\
+10 & RAN (CNN+GCN) & sector-neutral & 0.6944 & 0.5589 & 0.0957 & 1.0682 & 0.9802 & 3.41\% & 6.09\% & 0.2279 & -11.64\% \\
+10 & RAN w/o graph & raw & 0.6492 & 0.5540 & 0.0833 & 1.0353 & 0.9684 & 4.96\% & 8.96\% & 0.2386 & -16.33\% \\
+10 & RAN w/o graph & sector-neutral & 0.7590 & 0.6255 & 0.1305 & 1.1228 & 0.9837 & 3.83\% & 6.13\% & 0.2247 & -11.69\% \\
+10 & Ridge & raw & 0.4506 & 0.2434 & -0.1716 & 0.6899 & 0.8610 & 2.14\% & 8.80\% & 0.6234 & -14.23\% \\
+10 & Ridge & sector-neutral & 0.5499 & 0.2682 & -0.1505 & 0.7132 & 0.9028 & 1.71\% & 6.37\% & 0.6124 & -12.03\% \\
+10 & Momentum (120-20d) & raw & -0.1109 & -0.2277 & -0.6401 & 0.1682 & 0.1853 & -1.98\% & 8.68\% & 0.3027 & -29.69\% \\
+10 & Momentum (120-20d) & sector-neutral & -0.1198 & -0.2616 & -0.6830 & 0.1681 & 0.1242 & -1.83\% & 7.01\% & 0.2948 & -24.94\% \\
+10 & Reversal (5d) & raw & 0.3245 & -0.0009 & -0.3046 & 0.3121 & 0.2473 & -0.01\% & 7.51\% & 0.8714 & -14.18\% \\
+10 & Reversal (5d) & sector-neutral & 0.4347 & 0.0055 & -0.3076 & 0.3269 & 0.3282 & 0.03\% & 5.66\% & 0.8662 & -10.91\% \\
+10 & Random & raw & 0.0078 & -0.9395 & -1.1320 & -0.7579 & 0.0033 & -2.50\% & 2.66\% & 0.9012 & -28.52\% \\
+10 & Random & sector-neutral & 0.0054 & -0.9928 & -1.1899 & -0.8030 & 0.0005 & -2.50\% & 2.52\% & 0.9006 & -28.45\% \\
+20 & RAN (CNN+GCN) & raw & 0.4673 & 0.3848 & -0.1130 & 0.8575 & 0.9602 & 3.51\% & 9.13\% & 0.3997 & -18.37\% \\
+20 & RAN (CNN+GCN) & sector-neutral & 0.5384 & 0.4200 & -0.1345 & 0.9127 & 0.9703 & 2.60\% & 6.18\% & 0.3828 & -13.60\% \\
+20 & RAN w/o graph & raw & 0.4349 & 0.3499 & -0.1490 & 0.8191 & 0.9578 & 3.10\% & 8.86\% & 0.3992 & -19.99\% \\
+20 & RAN w/o graph & sector-neutral & 0.5859 & 0.4669 & -0.0882 & 0.9333 & 0.9832 & 2.87\% & 6.14\% & 0.3824 & -12.52\% \\
+20 & Ridge & raw & 0.4888 & 0.3722 & -0.0365 & 0.7772 & 0.8446 & 3.32\% & 8.93\% & 0.6270 & -13.94\% \\
+20 & Ridge & sector-neutral & 0.5539 & 0.3911 & -0.0166 & 0.7824 & 0.8800 & 2.48\% & 6.33\% & 0.6188 & -11.16\% \\
+20 & Momentum (120-20d) & raw & -0.1521 & -0.2483 & -0.6221 & 0.1498 & 0.2149 & -2.03\% & 8.17\% & 0.4243 & -28.97\% \\
+20 & Momentum (120-20d) & sector-neutral & -0.1049 & -0.2213 & -0.5995 & 0.1845 & 0.2007 & -1.47\% & 6.63\% & 0.4138 & -20.72\% \\
+20 & Reversal (5d) & raw & 0.3042 & 0.1175 & -0.1013 & 0.3311 & 0.3080 & 0.85\% & 7.19\% & 0.8699 & -8.03\% \\
+20 & Reversal (5d) & sector-neutral & 0.3556 & 0.1091 & -0.1412 & 0.3443 & 0.1515 & 0.59\% & 5.43\% & 0.8658 & -6.49\% \\
+20 & Random & raw & -0.0406 & -0.5648 & -0.6908 & -0.4434 & 0.1047 & -1.49\% & 2.64\% & 0.9009 & -18.25\% \\
+20 & Random & sector-neutral & -0.0115 & -0.5562 & -0.6895 & -0.4284 & 0.0094 & -1.41\% & 2.54\% & 0.9008 & -17.31\% \\
+60 & RAN (CNN+GCN) & raw & 0.2261 & 0.1640 & -0.1974 & 0.5207 & 0.9490 & 1.43\% & 8.71\% & 0.6964 & -13.37\% \\
+60 & RAN (CNN+GCN) & sector-neutral & 0.2870 & 0.1965 & -0.1834 & 0.6046 & 0.9388 & 1.17\% & 5.94\% & 0.6891 & -10.11\% \\
+60 & RAN w/o graph & raw & 0.2963 & 0.2299 & -0.1440 & 0.6001 & 0.9726 & 1.88\% & 8.18\% & 0.7013 & -13.05\% \\
+60 & RAN w/o graph & sector-neutral & 0.3365 & 0.2420 & -0.1459 & 0.6255 & 0.9561 & 1.37\% & 5.65\% & 0.6819 & -9.81\% \\
+60 & Ridge & raw & 0.4769 & 0.4147 & 0.0375 & 0.8087 & 0.9608 & 3.56\% & 8.59\% & 0.6758 & -11.02\% \\
+60 & Ridge & sector-neutral & 0.5735 & 0.4887 & 0.1026 & 0.8710 & 0.9757 & 3.06\% & 6.27\% & 0.6689 & -7.16\% \\
+60 & Momentum (120-20d) & raw & -0.0563 & -0.1360 & -0.4713 & 0.1947 & 0.3124 & -0.92\% & 6.76\% & 0.6915 & -18.72\% \\
+60 & Momentum (120-20d) & sector-neutral & -0.1007 & -0.2009 & -0.5320 & 0.1697 & 0.2674 & -1.08\% & 5.36\% & 0.6867 & -16.12\% \\
+60 & Reversal (5d) & raw & 0.1746 & 0.0850 & -0.0416 & 0.1967 & 0.9369 & 0.58\% & 6.80\% & 0.8624 & -4.64\% \\
+60 & Reversal (5d) & sector-neutral & 0.1662 & 0.0478 & -0.1004 & 0.1647 & 0.9063 & 0.25\% & 5.13\% & 0.8573 & -4.68\% \\
+60 & Random & raw & 0.0233 & -0.2077 & -0.2935 & -0.1339 & 0.6253 & -0.56\% & 2.71\% & 0.9019 & -7.52\% \\
+60 & Random & sector-neutral & 0.0488 & -0.1954 & -0.2703 & -0.1256 & 0.5238 & -0.50\% & 2.56\% & 0.9009 & -6.82\% \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{Paired Comparisons and Graph Ablation}
+
+The paired bootstrap results show that the full graph model and the no-graph ablation are close in the S\&P 500 universe. At ten sessions, the paired IC difference is 0.0007 with a 95 percent interval of [-0.0047, 0.0063], while the Sharpe difference is -0.0598 with interval [-0.1666, 0.0419]. At twenty sessions the corresponding differences are 0.0029 for IC and 0.0350 for Sharpe. At sixty sessions the graph model is lower by 0.0026 in IC and 0.0660 in Sharpe. These comparisons do not isolate a statistically clear incremental contribution from the graph under this experiment.
+
+\begin{table}[tbp]
+\centering\scriptsize
+\caption{Paired bootstrap comparisons for the S\&P 500 universe.}
+\label{tab:sp500paired}
+\begin{tabular}{rllrrrrrr}
+\toprule
+$H$ & Comparison & $\Delta IC$ & CI low & CI high & $p_{IC}$ & $\Delta SR$ & CI low & CI high\\
+\midrule
+10 & RAN - RAN w/o graph & 0.0007 & -0.0047 & 0.0063 & 0.4165 & -0.0598 & -0.1666 & 0.0419 \\
+10 & RAN - Ridge & 0.0016 & -0.0144 & 0.0177 & 0.4350 & 0.2508 & -0.1786 & 0.6880 \\
+10 & RAN - Momentum (120-20d) & 0.0177 & -0.0084 & 0.0440 & 0.0950 & 0.7220 & 0.0507 & 1.3812 \\
+10 & RAN - Reversal (5d) & 0.0033 & -0.0156 & 0.0228 & 0.3720 & 0.4952 & 0.0000 & 0.9972 \\
+20 & RAN - RAN w/o graph & 0.0029 & -0.0037 & 0.0095 & 0.2040 & 0.0350 & -0.0806 & 0.1577 \\
+20 & RAN - Ridge & -0.0045 & -0.0272 & 0.0204 & 0.6465 & 0.0126 & -0.4471 & 0.4492 \\
+20 & RAN - Momentum (120-20d) & 0.0231 & -0.0125 & 0.0559 & 0.1055 & 0.6331 & -0.0362 & 1.2464 \\
+20 & RAN - Reversal (5d) & 0.0028 & -0.0240 & 0.0289 & 0.3965 & 0.2673 & -0.2293 & 0.7394 \\
+60 & RAN - RAN w/o graph & -0.0026 & -0.0139 & 0.0058 & 0.6590 & -0.0659 & -0.1658 & 0.0154 \\
+60 & RAN - Ridge & -0.0254 & -0.0471 & -0.0032 & 0.9870 & -0.2508 & -0.4551 & -0.0420 \\
+60 & RAN - Momentum (120-20d) & 0.0223 & -0.0272 & 0.0679 & 0.1860 & 0.3000 & -0.1802 & 0.8146 \\
+60 & RAN - Reversal (5d) & -0.0060 & -0.0411 & 0.0251 & 0.6405 & 0.0789 & -0.2590 & 0.4448 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Transaction-Cost Sensitivity}
+
+The cost grid shows the same qualitative dependence on implementation friction as the primary experiment. For RAN, ten-session net Sharpe declines from 0.561 at zero cost to 0.294 at 20 basis points. The twenty-session value declines from 0.440 to 0.219, while the sixty-session value declines from 0.197 to 0.064. The S\&P 500 results are therefore sensitive to turnover and assumed execution costs even though the strategy remains positive in the reported grid.
+
+\begin{table}[tbp]
+\centering\scriptsize
+\caption{S\&P 500 cost sensitivity: net Sharpe across transaction-cost assumptions.}
+\label{tab:sp500cost}
+\begin{tabular}{r lrrrrr}
+\toprule
+$H$ & Model & 0 bps & 2.5 bps & 5 bps & 10 bps & 20 bps\\
+\midrule
+10 & RAN (CNN+GCN) & 0.561 & 0.528 & 0.494 & 0.428 & 0.294 \\
+10 & RAN w/o graph & 0.621 & 0.588 & 0.554 & 0.487 & 0.352 \\
+10 & Ridge & 0.422 & 0.333 & 0.243 & 0.065 & -0.291 \\
+10 & Momentum (120-20d) & -0.140 & -0.184 & -0.228 & -0.316 & -0.492 \\
+10 & Reversal (5d) & 0.291 & 0.145 & -0.001 & -0.293 & -0.876 \\
+10 & Random & -0.086 & -0.513 & -0.940 & -1.793 & -3.500 \\
+20 & RAN (CNN+GCN) & 0.440 & 0.412 & 0.385 & 0.330 & 0.219 \\
+20 & RAN w/o graph & 0.407 & 0.378 & 0.350 & 0.293 & 0.179 \\
+20 & Ridge & 0.461 & 0.417 & 0.372 & 0.284 & 0.107 \\
+20 & Momentum (120-20d) & -0.183 & -0.215 & -0.248 & -0.314 & -0.445 \\
+20 & Reversal (5d) & 0.269 & 0.194 & 0.118 & -0.034 & -0.338 \\
+20 & Random & -0.135 & -0.350 & -0.565 & -0.994 & -1.851 \\
+60 & RAN (CNN+GCN) & 0.197 & 0.181 & 0.164 & 0.131 & 0.064 \\
+60 & RAN w/o graph & 0.266 & 0.248 & 0.230 & 0.194 & 0.122 \\
+60 & Ridge & 0.448 & 0.431 & 0.415 & 0.382 & 0.316 \\
+60 & Momentum (120-20d) & -0.093 & -0.115 & -0.136 & -0.179 & -0.264 \\
+60 & Reversal (5d) & 0.138 & 0.111 & 0.085 & 0.032 & -0.074 \\
+60 & Random & -0.069 & -0.138 & -0.208 & -0.346 & -0.624 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[tbp]\centering\includegraphics[width=.96\textwidth]{sp500_fig1_cumulative_net_return.pdf}\caption{\textbf{Cumulative net return for the S\&P 500 development experiment.} The figure is descriptive and uses the saved development-stage outputs.}\label{fig:sp500cum}\end{figure}
+\begin{figure}[tbp]\centering\includegraphics[width=.96\textwidth]{sp500_fig2_rolling_rank_ic.pdf}\caption{\textbf{Rolling rank IC for the S\&P 500 development experiment.} The figure is descriptive and uses the saved development-stage outputs.}\label{fig:sp500roll}\end{figure}
+\begin{figure}[tbp]\centering\includegraphics[width=.96\textwidth]{sp500_fig3_sharpe_forest_full.pdf}\caption{\textbf{Sharpe-ratio comparison across S\&P 500 models and horizons.} The figure is descriptive and uses the saved development-stage outputs.}\label{fig:sp500forest}\end{figure}
+\begin{figure}[tbp]\centering\includegraphics[width=.96\textwidth]{sp500_fig4_cost_sensitivity.pdf}\caption{\textbf{Transaction-cost sensitivity of net Sharpe on the S\&P 500 universe.} The figure is descriptive and uses the saved development-stage outputs.}\label{fig:sp500costfig}\end{figure}
+\begin{figure}[tbp]\centering\includegraphics[width=.96\textwidth]{sp500_fig5_annual_rank_ic.pdf}\caption{\textbf{Annual rank IC for the S\&P 500 RAN configurations.} The figure is descriptive and uses the saved development-stage outputs.}\label{fig:sp500annual}\end{figure}
+\begin{figure}[tbp]\centering\includegraphics[width=.96\textwidth]{sp500_fig6_permutation_null_ran.pdf}\caption{\textbf{Permutation null distributions for the S\&P 500 RAN results.} The figure is descriptive and uses the saved development-stage outputs.}\label{fig:sp500permfig}\end{figure}
+\begin{figure}[tbp]\centering\includegraphics[width=.96\textwidth]{sp500_fig7_decile_returns_ran.pdf}\caption{\textbf{Cross-sectional decile returns generated by S\&P 500 RAN scores.} The figure is descriptive and uses the saved development-stage outputs.}\label{fig:sp500decile}\end{figure}
+\subsection{Year-by-Year S\&P 500 Behavior}
+
+The annual breakdown shows that the aggregate result is assembled from materially different yearly environments. The ten-session RAN configuration has negative rank IC in 2009, 2011, 2015, 2018, and 2022, while the corresponding annualized net return is positive in several other years. At the twenty-session horizon, 2011 and 2015 are particularly weak, while 2016 and 2020 are strongly positive. The sixty-session horizon exhibits positive and negative periods with substantially lower aggregate risk-adjusted performance. These observations reinforce that the aggregate statistic should not be interpreted as uniform predictive behavior across time.
+
+\begingroup\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{longtable}{rrr r r}
+\caption{Annual S\&P 500 RAN breakdown.}\label{tab:sp500year}\\
+\toprule
+Horizon & Year & Rank IC & Ann. net return & $N$\\
+\midrule
+\endfirsthead
+\toprule
+Horizon & Year & Rank IC & Ann. net return & $N$\\
+\midrule
+\endhead
+10 & 2009 & -0.0332 & -8.24\% & 71 \\
+10 & 2010 & 0.0473 & 9.19\% & 252 \\
+10 & 2011 & -0.0626 & -8.75\% & 252 \\
+10 & 2012 & 0.0584 & 9.69\% & 250 \\
+10 & 2013 & 0.0063 & 4.75\% & 252 \\
+10 & 2014 & 0.0273 & 0.90\% & 252 \\
+10 & 2015 & -0.0313 & -5.57\% & 252 \\
+10 & 2016 & 0.0648 & 16.22\% & 252 \\
+10 & 2017 & 0.0257 & 1.71\% & 251 \\
+10 & 2018 & -0.0002 & -3.40\% & 251 \\
+10 & 2019 & 0.0327 & 7.84\% & 252 \\
+10 & 2020 & 0.0388 & 18.62\% & 253 \\
+10 & 2021 & 0.0162 & 10.28\% & 252 \\
+10 & 2022 & -0.0059 & 0.33\% & 240 \\
+20 & 2009 & -0.0334 & -4.07\% & 71 \\
+20 & 2010 & 0.0715 & 10.14\% & 252 \\
+20 & 2011 & -0.1230 & -16.19\% & 252 \\
+20 & 2012 & -0.0024 & 1.27\% & 250 \\
+20 & 2013 & 0.0370 & 7.29\% & 252 \\
+20 & 2014 & 0.0297 & 1.80\% & 252 \\
+20 & 2015 & -0.0329 & -9.29\% & 252 \\
+20 & 2016 & 0.1006 & 17.73\% & 252 \\
+20 & 2017 & 0.0286 & 2.54\% & 251 \\
+20 & 2018 & -0.0174 & -4.93\% & 251 \\
+20 & 2019 & 0.0475 & 5.71\% & 252 \\
+20 & 2020 & 0.0835 & 23.88\% & 253 \\
+20 & 2021 & 0.0216 & 10.47\% & 252 \\
+20 & 2022 & -0.0305 & -3.35\% & 230 \\
+60 & 2009 & 0.1323 & 9.83\% & 71 \\
+60 & 2010 & 0.1115 & 8.41\% & 252 \\
+60 & 2011 & -0.1082 & -4.37\% & 252 \\
+60 & 2012 & 0.0378 & 2.49\% & 250 \\
+60 & 2013 & 0.0044 & 1.47\% & 252 \\
+60 & 2014 & 0.0804 & 2.95\% & 252 \\
+60 & 2015 & -0.1096 & -12.81\% & 252 \\
+60 & 2016 & 0.1272 & 15.24\% & 252 \\
+60 & 2017 & 0.0110 & 1.87\% & 251 \\
+60 & 2018 & -0.0502 & -5.14\% & 251 \\
+60 & 2019 & -0.0103 & -1.71\% & 252 \\
+60 & 2020 & 0.0048 & 9.33\% & 253 \\
+60 & 2021 & -0.0611 & -3.70\% & 252 \\
+60 & 2022 & 0.0132 & 2.32\% & 190 \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{Stress Episodes}
+
+Stress-period analysis is particularly important for the S\&P 500 universe because the cross-section is exposed to common equity shocks. The saved stress table records negative rank IC during the Euro-crisis episode at ten and twenty sessions and during the 2015--2016 and Q4 2018 episodes. In contrast, the ten-session COVID interval has positive rank IC and a positive annualized net return in this particular run. The sixty-session horizon also records positive COVID-period statistics. These heterogeneous outcomes are reported as historical episode diagnostics rather than as evidence of regime-specific reliability.
+
+\begingroup\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{longtable}{rrlrrr}
+\caption{S\&P 500 RAN stress-episode diagnostics.}\label{tab:sp500stress}\\
+\toprule
+Horizon & Model & Episode & Rank IC & Ann. net return & $N$\\
+\midrule
+\endfirsthead
+\toprule
+Horizon & Model & Episode & Rank IC & Ann. net return & $N$\\
+\midrule
+\endhead
+10 & RAN & Euro crisis (Jul-Dec 2011) & -0.0576 & -8.33\% & 127 \\
+10 & RAN & Aug-2015 / Feb-2016 stress & -0.0245 & -7.88\% & 145 \\
+10 & RAN & Q4-2018 sell-off & -0.0601 & -18.88\% & 63 \\
+10 & RAN & COVID crash (Feb-Apr 2020) & 0.0103 & 7.23\% & 52 \\
+10 & RAN & 2022 rate-shock bear market & -0.0059 & 0.33\% & 240 \\
+20 & RAN & Euro crisis (Jul-Dec 2011) & -0.1447 & -22.01\% & 127 \\
+20 & RAN & Aug-2015 / Feb-2016 stress & -0.0235 & -7.63\% & 145 \\
+20 & RAN & Q4-2018 sell-off & -0.0287 & -9.83\% & 63 \\
+20 & RAN & COVID crash (Feb-Apr 2020) & 0.1083 & 28.78\% & 52 \\
+20 & RAN & 2022 rate-shock bear market & -0.0305 & -3.35\% & 230 \\
+60 & RAN & Euro crisis (Jul-Dec 2011) & -0.0047 & 6.00\% & 127 \\
+60 & RAN & Aug-2015 / Feb-2016 stress & -0.1107 & -9.53\% & 145 \\
+60 & RAN & Q4-2018 sell-off & 0.0857 & 4.68\% & 63 \\
+60 & RAN & COVID crash (Feb-Apr 2020) & 0.2790 & 40.29\% & 52 \\
+60 & RAN & 2022 rate-shock bear market & 0.0132 & 2.32\% & 190 \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{Permutation Diagnostics}
+
+The permutation experiment provides a second diagnostic against arbitrary score assignment. The ten-session RAN gross Sharpe is 0.563 with median permutation $p=0.026$, and the twenty-session gross Sharpe is 0.532 with median $p=0.025$. At sixty sessions the corresponding values are 0.453 and 0.061. The permutation results therefore weaken as the horizon lengthens and should be read alongside the Newey--West and multiple-testing results rather than as a standalone significance claim.
+
+\begin{table}[tbp]
+\centering\scriptsize
+\caption{Permutation diagnostics for the S\&P 500 development run.}
+\label{tab:sp500perm}
+\begin{tabular}{rlrr}
+\toprule
+Horizon & Model & Gross Sharpe & Median permutation $p$\\
+\midrule
+10 & RAN (CNN+GCN) & 0.5628 & 0.0260 \\
+10 & RAN w/o graph & 0.6037 & 0.0170 \\
+10 & Ridge & 0.4586 & 0.0609 \\
+10 & Momentum (120-20d) & -0.1193 & 0.6733 \\
+10 & Reversal (5d) & 0.1679 & 0.2887 \\
+20 & RAN (CNN+GCN) & 0.5323 & 0.0250 \\
+20 & RAN w/o graph & 0.5159 & 0.0290 \\
+20 & Ridge & 0.4269 & 0.0639 \\
+20 & Momentum (120-20d) & -0.1144 & 0.6094 \\
+20 & Reversal (5d) & 0.2410 & 0.1938 \\
+60 & RAN (CNN+GCN) & 0.4527 & 0.0609 \\
+60 & RAN w/o graph & 0.5042 & 0.0450 \\
+60 & Ridge & 0.5552 & 0.0310 \\
+60 & Momentum (120-20d) & -0.0685 & 0.6004 \\
+60 & Reversal (5d) & 0.4261 & 0.0709 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{S\&P 500 Walk-Forward Training Audit}
+
+The S\&P 500 run also preserves the chronological fitting audit. Each horizon uses 27 RAN walk-forward windows beginning in September 2009 and ending in December 2022. The fit blocks contain 789 observations for the ten-session model, 771 for the twenty-session model, and 699 for the sixty-session model, with validation blocks immediately preceding each test interval. The table below records the validation IC, selected epoch, fit/validation/test counts, and wall-clock runtime for every RAN window. This makes the S\&P 500 experiment auditable at the model-fitting level rather than only at the aggregate portfolio level.
+
+\begingroup\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{longtable}{rrrrlrrrrr}
+\caption{Full S\&P 500 RAN walk-forward training audit.}\label{tab:sp500audit}\\
+\toprule
+$H$ & Window & Test start & Test end & Val. IC & Best epoch & Fit & Val. & Test & Runtime (s)\\
+\midrule
+\endfirsthead
+\toprule
+$H$ & Window & Test start & Test end & Val. IC & Best epoch & Fit & Val. & Test & Runtime (s)\\
+\midrule
+\endhead
+10 & 1 & 2009-09-22 & 2010-03-23 & 0.0105 & 1.2 & 789 & 199 & 126 & 43.1 \\
+10 & 2 & 2010-03-24 & 2010-09-21 & -0.0107 & 6.8 & 789 & 199 & 126 & 76.1 \\
+10 & 3 & 2010-09-22 & 2011-03-22 & 0.0555 & 8.4 & 789 & 199 & 126 & 92.8 \\
+10 & 4 & 2011-03-23 & 2011-09-20 & 0.0369 & 0.2 & 789 & 199 & 126 & 32.0 \\
+10 & 5 & 2011-09-21 & 2012-03-21 & -0.0448 & 1.8 & 789 & 199 & 126 & 44.4 \\
+10 & 6 & 2012-03-22 & 2012-09-19 & 0.0321 & 5.2 & 789 & 199 & 126 & 70.7 \\
+10 & 7 & 2012-09-20 & 2013-03-25 & 0.0468 & 4.2 & 789 & 199 & 126 & 63.9 \\
+10 & 8 & 2013-03-26 & 2013-09-23 & 0.0372 & 0.2 & 789 & 199 & 126 & 33.1 \\
+10 & 9 & 2013-09-24 & 2014-03-25 & -0.0078 & 0.6 & 789 & 199 & 126 & 36.3 \\
+10 & 10 & 2014-03-26 & 2014-09-23 & 0.0146 & 5.6 & 789 & 199 & 126 & 75.0 \\
+10 & 11 & 2014-09-24 & 2015-03-25 & 0.0436 & 0.4 & 789 & 199 & 126 & 34.6 \\
+10 & 12 & 2015-03-26 & 2015-09-23 & 0.0135 & 3.8 & 789 & 199 & 126 & 59.2 \\
+10 & 13 & 2015-09-24 & 2016-03-24 & -0.0083 & 2.8 & 789 & 199 & 126 & 52.9 \\
+10 & 14 & 2016-03-28 & 2016-09-22 & -0.0186 & 4.4 & 789 & 199 & 126 & 65.4 \\
+10 & 15 & 2016-09-23 & 2017-03-24 & 0.0188 & 1.4 & 789 & 199 & 126 & 42.4 \\
+10 & 16 & 2017-03-27 & 2017-09-22 & 0.0750 & 3.8 & 789 & 199 & 126 & 60.9 \\
+10 & 17 & 2017-09-25 & 2018-03-26 & 0.0122 & 4.0 & 789 & 199 & 126 & 62.5 \\
+10 & 18 & 2018-03-27 & 2018-09-24 & 0.0644 & 0.2 & 789 & 199 & 126 & 32.9 \\
+10 & 19 & 2018-09-25 & 2019-03-27 & 0.0496 & 1.2 & 789 & 199 & 126 & 40.7 \\
+10 & 20 & 2019-03-28 & 2019-09-25 & 0.0179 & 6.0 & 789 & 199 & 126 & 78.0 \\
+10 & 21 & 2019-09-26 & 2020-03-26 & 0.0282 & 6.0 & 789 & 199 & 126 & 73.2 \\
+10 & 22 & 2020-03-27 & 2020-09-24 & -0.0098 & 0.0 & 789 & 199 & 126 & 31.3 \\
+10 & 23 & 2020-09-25 & 2021-03-26 & 0.0257 & 1.6 & 789 & 199 & 126 & 43.9 \\
+10 & 24 & 2021-03-29 & 2021-09-24 & 0.0738 & 0.2 & 789 & 199 & 126 & 32.9 \\
+10 & 25 & 2021-09-27 & 2022-03-25 & 0.0412 & 0.6 & 789 & 199 & 126 & 36.0 \\
+10 & 26 & 2022-03-28 & 2022-09-26 & 0.0000 & 1.8 & 789 & 199 & 126 & 45.3 \\
+10 & 27 & 2022-09-27 & 2022-12-30 & 0.0115 & 1.2 & 789 & 199 & 56 & 40.5 \\
+20 & 1 & 2009-09-22 & 2010-03-23 & 0.1098 & 0.0 & 771 & 197 & 126 & 31.8 \\
+20 & 2 & 2010-03-24 & 2010-09-21 & -0.0423 & 6.6 & 771 & 197 & 126 & 80.4 \\
+20 & 3 & 2010-09-22 & 2011-03-22 & 0.0755 & 6.6 & 771 & 197 & 126 & 82.2 \\
+20 & 4 & 2011-03-23 & 2011-09-20 & 0.0722 & 0.0 & 771 & 197 & 126 & 31.4 \\
+20 & 5 & 2011-09-21 & 2012-03-21 & -0.0298 & 3.0 & 771 & 197 & 126 & 54.6 \\
+20 & 6 & 2012-03-22 & 2012-09-19 & 0.0276 & 6.4 & 771 & 197 & 126 & 80.4 \\
+20 & 7 & 2012-09-20 & 2013-03-25 & 0.0812 & 3.2 & 771 & 197 & 126 & 55.8 \\
+20 & 8 & 2013-03-26 & 2013-09-23 & 0.0622 & 0.0 & 771 & 197 & 126 & 31.2 \\
+20 & 9 & 2013-09-24 & 2014-03-25 & -0.0126 & 1.6 & 771 & 197 & 126 & 43.6 \\
+20 & 10 & 2014-03-26 & 2014-09-23 & -0.0356 & 1.4 & 771 & 197 & 126 & 42.1 \\
+20 & 11 & 2014-09-24 & 2015-03-25 & 0.0570 & 0.8 & 771 & 197 & 126 & 37.5 \\
+20 & 12 & 2015-03-26 & 2015-09-23 & 0.0187 & 0.8 & 771 & 197 & 126 & 37.6 \\
+20 & 13 & 2015-09-24 & 2016-03-24 & -0.0069 & 4.8 & 771 & 197 & 126 & 68.3 \\
+20 & 14 & 2016-03-28 & 2016-09-22 & -0.0294 & 5.6 & 771 & 197 & 126 & 74.3 \\
+20 & 15 & 2016-09-23 & 2017-03-24 & 0.0145 & 0.4 & 771 & 197 & 126 & 34.3 \\
+20 & 16 & 2017-03-27 & 2017-09-22 & 0.1263 & 2.0 & 771 & 197 & 126 & 46.6 \\
+20 & 17 & 2017-09-25 & 2018-03-26 & 0.0145 & 2.6 & 771 & 197 & 126 & 51.5 \\
+20 & 18 & 2018-03-27 & 2018-09-24 & 0.0911 & 0.0 & 771 & 197 & 126 & 31.4 \\
+20 & 19 & 2018-09-25 & 2019-03-27 & 0.0489 & 1.8 & 771 & 197 & 126 & 45.3 \\
+20 & 20 & 2019-03-28 & 2019-09-25 & 0.0439 & 6.6 & 771 & 197 & 126 & 82.3 \\
+20 & 21 & 2019-09-26 & 2020-03-26 & 0.0557 & 7.4 & 771 & 197 & 126 & 88.6 \\
+20 & 22 & 2020-03-27 & 2020-09-24 & -0.0137 & 0.0 & 771 & 197 & 126 & 31.4 \\
+20 & 23 & 2020-09-25 & 2021-03-26 & 0.0225 & 0.8 & 771 & 197 & 126 & 37.8 \\
+20 & 24 & 2021-03-29 & 2021-09-24 & 0.1193 & 0.0 & 771 & 197 & 126 & 31.5 \\
+20 & 25 & 2021-09-27 & 2022-03-25 & 0.0888 & 1.8 & 771 & 197 & 126 & 45.3 \\
+20 & 26 & 2022-03-28 & 2022-09-26 & -0.0134 & 2.0 & 771 & 197 & 126 & 46.9 \\
+20 & 27 & 2022-09-27 & 2022-12-30 & -0.0458 & 1.6 & 771 & 197 & 46 & 43.7 \\
+60 & 1 & 2009-09-22 & 2010-03-23 & 0.1494 & 0.0 & 699 & 189 & 126 & 28.1 \\
+60 & 2 & 2010-03-24 & 2010-09-21 & -0.1306 & 3.4 & 699 & 189 & 126 & 51.0 \\
+60 & 3 & 2010-09-22 & 2011-03-22 & 0.0904 & 3.4 & 699 & 189 & 126 & 51.0 \\
+60 & 4 & 2011-03-23 & 2011-09-20 & 0.1059 & 0.0 & 699 & 189 & 126 & 27.7 \\
+60 & 5 & 2011-09-21 & 2012-03-21 & 0.0036 & 2.2 & 699 & 189 & 126 & 42.9 \\
+60 & 6 & 2012-03-22 & 2012-09-19 & 0.0766 & 3.6 & 699 & 189 & 126 & 52.7 \\
+60 & 7 & 2012-09-20 & 2013-03-25 & 0.1845 & 1.0 & 699 & 189 & 126 & 34.6 \\
+60 & 8 & 2013-03-26 & 2013-09-23 & 0.1290 & 0.0 & 699 & 189 & 126 & 27.6 \\
+60 & 9 & 2013-09-24 & 2014-03-25 & -0.0264 & 1.4 & 699 & 189 & 126 & 37.2 \\
+60 & 10 & 2014-03-26 & 2014-09-23 & -0.1299 & 2.0 & 699 & 189 & 126 & 41.3 \\
+60 & 11 & 2014-09-24 & 2015-03-25 & 0.0884 & 0.0 & 699 & 189 & 126 & 27.7 \\
+60 & 12 & 2015-03-26 & 2015-09-23 & 0.0888 & 0.6 & 699 & 189 & 126 & 31.8 \\
+60 & 13 & 2015-09-24 & 2016-03-24 & 0.0190 & 0.2 & 699 & 189 & 126 & 29.0 \\
+60 & 14 & 2016-03-28 & 2016-09-22 & -0.0714 & 4.8 & 699 & 189 & 126 & 60.3 \\
+60 & 15 & 2016-09-23 & 2017-03-24 & -0.0185 & 2.0 & 699 & 189 & 126 & 41.4 \\
+60 & 16 & 2017-03-27 & 2017-09-22 & 0.1135 & 1.2 & 699 & 189 & 126 & 36.0 \\
+60 & 17 & 2017-09-25 & 2018-03-26 & -0.0230 & 3.2 & 699 & 189 & 126 & 49.5 \\
+60 & 18 & 2018-03-27 & 2018-09-24 & 0.1814 & 0.2 & 699 & 189 & 126 & 29.0 \\
+60 & 19 & 2018-09-25 & 2019-03-27 & 0.0986 & 0.0 & 699 & 189 & 126 & 27.7 \\
+60 & 20 & 2019-03-28 & 2019-09-25 & -0.0225 & 5.4 & 699 & 189 & 126 & 64.9 \\
+60 & 21 & 2019-09-26 & 2020-03-26 & 0.0010 & 4.4 & 699 & 189 & 126 & 58.2 \\
+60 & 22 & 2020-03-27 & 2020-09-24 & 0.0755 & 10.6 & 699 & 189 & 126 & 94.0 \\
+60 & 23 & 2020-09-25 & 2021-03-26 & 0.1176 & 4.2 & 699 & 189 & 126 & 56.6 \\
+60 & 24 & 2021-03-29 & 2021-09-24 & 0.1076 & 0.0 & 699 & 189 & 126 & 27.6 \\
+60 & 25 & 2021-09-27 & 2022-03-25 & 0.0337 & 0.2 & 699 & 189 & 126 & 29.1 \\
+60 & 26 & 2022-03-28 & 2022-09-26 & 0.0164 & 5.6 & 699 & 189 & 126 & 65.7 \\
+60 & 27 & 2022-09-27 & 2022-12-30 & -0.0494 & 2.0 & 699 & 189 & 6 & 40.9 \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{S\&P 500 Reproducibility Record}
+
+The S\&P 500 configuration uses the same principal hyperparameters as the multi-asset development run: 60-session sequences, ten-nearest-neighbour graphs, hidden width 32, dropout 0.5, batch size 32, maximum 15 epochs with patience 3, five random seeds, learning rate 0.001, weight decay 0.001, feature noise 0.1, IC-loss weight 2.0, a 1,008-row rolling training window, 126-row step, 20 percent validation fraction, one-session execution lag, top and bottom 10 percent portfolio tails, 5 basis points transaction cost, 50 basis points annual short borrow, 2,000 bootstrap resamples, and 1,000 permutations. The run was executed on Linux with Python 3.13.15 and PyTorch 2.11.0+cu128; its data hash is \texttt{a5bfcca5417a62f3}. The S\&P 500 run was created on 21 September 2026 and was executed with the development stage truncated before the 2023 holdout.
 
 \section{Complete Empirical Record}
 
