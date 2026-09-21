@@ -1,0 +1,57 @@
+ticker,sector
+SPY,US Equity
+QQQ,US Equity
+IWM,US Equity
+DIA,US Equity
+MDY,US Equity
+XLK,US Sector
+XLF,US Sector
+XLE,US Sector
+XLV,US Sector
+XLY,US Sector
+XLP,US Sector
+XLI,US Sector
+XLB,US Sector
+XLU,US Sector
+EFA,Intl Equity
+EEM,Intl Equity
+EWJ,Intl Equity
+EWG,Intl Equity
+EWU,Intl Equity
+EWZ,Intl Equity
+EWY,Intl Equity
+EWT,Intl Equity
+FXI,Intl Equity
+EWA,Intl Equity
+EWC,Intl Equity
+EWH,Intl Equity
+EWS,Intl Equity
+EWW,Intl Equity
+EZU,Intl Equity
+VGK,Intl Equity
+TLT,Fixed Income
+IEF,Fixed Income
+SHY,Fixed Income
+IEI,Fixed Income
+TIP,Fixed Income
+LQD,Fixed Income
+AGG,Fixed Income
+HYG,Fixed Income
+MUB,Fixed Income
+EMB,Fixed Income
+BND,Fixed Income
+GLD,Commodity
+SLV,Commodity
+USO,Commodity
+DBC,Commodity
+DBA,Commodity
+UNG,Commodity
+DBB,Commodity
+UUP,Currency
+FXE,Currency
+FXY,Currency
+FXB,Currency
+FXA,Currency
+FXC,Currency
+VNQ,Real Estate
+IYR,Real Estate

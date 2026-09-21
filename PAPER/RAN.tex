@@ -1,0 +1,1097 @@
+
+\documentclass[10pt]{article}
+\usepackage[margin=0.82in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,booktabs,multirow,graphicx,subcaption,float,hyperref,natbib,enumitem,algorithm,algpseudocode,microtype,xcolor}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\graphicspath{{figures/}}
+\setlength{\parindent}{1.4em}
+\setlength{\parskip}{0pt}
+\renewcommand{\arraystretch}{1.12}
+
+\title{\textbf{Relational Asset Network (RAN):}\\
+A Causal Temporal--Graph Architecture for Cross-Sectional Asset Ranking}
+\author{\textbf{Akhilesh Varma}\\
+\small\href{mailto:akhverm@gmail.com}{akhverm@gmail.com}}
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Cross-sectional return prediction is fundamentally a ranking problem: the practical question is often not the exact magnitude of an individual asset's future return, but whether a model can distinguish relatively stronger from relatively weaker assets over a specified investment horizon. This paper develops and evaluates the Relational Asset Network (RAN), a compact neural architecture designed for that setting. RAN combines a causal dilated temporal convolutional encoder with a dynamically constructed correlation graph over assets. Each asset is represented by a 60-session history of 57 causal features. Three one-dimensional convolutions with kernel size three and dilations one, two, and four form the temporal representation; a ten-nearest-neighbour correlation graph then allows the asset representations to exchange information through a residual graph convolution. A shared linear head produces a cross-sectional score for every asset.
+
+The empirical study is based on the supplied research implementation and its saved development-stage outputs. The data are real adjusted OHLCV observations retrieved through the \texttt{yfinance} interface to Yahoo Finance. The evaluated universe contains 56 liquid US-listed ETFs spanning seven asset classes and 3,657 common observations from 24 June 2008 through 30 December 2022. The experimental design uses chronological walk-forward estimation, a one-session execution lag, purged training and validation samples, training-window-only feature normalization, five-seed model averaging, overlapping-label-aware Newey--West inference, stationary bootstrap confidence intervals, paired bootstrap comparisons, permutation tests, and Holm adjustment of the model--horizon testing family. The primary ten-, twenty-, and sixty-session RAN configurations obtain mean rank ICs of 0.0923, 0.1159, and 0.0807, respectively. Under the supplied 5-basis-point transaction-cost and 50-basis-point annual short-borrow assumptions, their net Sharpe ratios are 0.556, 0.521, and 0.156.
+
+The results provide evidence that the complete RAN pipeline produces a positive cross-sectional ranking signal in the supplied development period. They do not, however, establish that the graph component is responsible for that performance: the no-graph ablation is statistically close to the full model at ten and twenty sessions. Nor do they establish post-2023 out-of-sample performance, because the supplied archive contains the development stage but not the configured frozen final-stage results. The paper therefore treats RAN as a reproducible empirical research system and identifies the untouched holdout, point-in-time universe construction, and more realistic execution modeling as necessary subsequent tests.
+\end{abstract}
+
+\section{Introduction}
+
+The empirical prediction of asset returns has a long history in financial economics, but the object being predicted determines the appropriate architecture, evaluation procedure, and statistical interpretation. A model that attempts to forecast the absolute return of one security is solving a different problem from a model whose only purpose is to order a universe of securities by their subsequent relative performance. The latter formulation is especially natural for market-neutral portfolio construction because a trading rule can discard the absolute scale of a prediction and retain only its ordering. RAN is designed explicitly for this second problem.
+
+The economic motivation is connected to the long literature on cross-sectional predictability. The momentum effect documented by Jegadeesh and Titman \citep{jegadeesh1993} demonstrates that relative past performance can contain information about subsequent returns. Later empirical asset-pricing work has shown that a large collection of firm characteristics and their nonlinear interactions can be used by machine-learning methods to improve the approximation of conditional expected returns \citep{gu2020}. At the same time, the growth of machine learning in finance creates a methodological problem: a sufficiently flexible research pipeline can produce apparently attractive historical results even when the underlying signal is weak or absent. The probability of backtest overfitting, multiple testing, data leakage, and inadvertent use of future information therefore become central concerns rather than secondary implementation details \citep{bailey2017}.
+
+The RAN experiment was constructed around these concerns. It does not simply fit a neural network to a randomly shuffled collection of observations and then evaluate the same distribution. Instead, observations are organized chronologically, the target is delayed to represent execution, training labels are purged around validation and test boundaries, feature normalization is estimated only from the appropriate historical training block, and model selection is performed using a chronological validation block. The resulting model is then evaluated on a later interval that was not used for parameter selection. The supplied code further implements a development/final stage separation so that an eventual frozen holdout can be evaluated without being loaded during development.
+
+The architectural question is similarly specific. Financial assets are not independent observations in the economic sense. Equity indices, sectors, commodities, rates, currencies, and international markets exhibit time-varying dependence. A purely temporal model that treats every asset independently discards information that is naturally relational. Conversely, a graph model without an explicit temporal encoder has difficulty representing the local path of prices, volatility, liquidity, and momentum that precedes a decision date. RAN therefore combines both structures: each asset first receives an independently encoded temporal representation, after which assets communicate through a graph whose edges are estimated from recent return correlations.
+
+The architecture is intentionally small. The temporal encoder has three dilated convolutional layers and the graph stage contains a single residual graph convolution. With 57 input features and a hidden width of 32, the complete model has 12,801 trainable parameters. This is materially smaller than many contemporary deep-learning architectures and makes the experiment useful as a controlled study of inductive structure rather than a demonstration of raw model scale.
+
+The paper makes a distinction between the mathematical specification of the algorithm and the empirical conclusions drawn from the supplied run. The mathematical specification is exact: the feature equations, target construction, graph construction, temporal encoder, graph layer, loss function, walk-forward procedure, portfolio weights, cost model, and statistical tests are stated explicitly. The empirical claims are restricted to the saved results. In particular, no performance is attributed to a post-2022 holdout that is absent from the supplied archive.
+
+\section{Research Question and Experimental Scope}
+
+The principal research question is whether a compact architecture that jointly represents recent temporal information and contemporaneous cross-asset relationships can generate useful cross-sectional rankings of a heterogeneous ETF universe. Formally, for each decision date $t$, let $A$ denote the number of available assets and let $s_t\in\mathbb{R}^{A}$ be the vector of model scores. The task is to construct $s_t$ such that the ordering of its components is positively associated with the ordering of realized forward returns $y_t$.
+
+The experiment considers three holding horizons, $H\in\{10,20,60\}$ trading sessions. The signal is generated at the close of date $t$, executed one close later, and held for $H$ sessions. This distinction prevents the common ambiguity in which a model is evaluated against a future return whose starting price is unavailable at the time the signal is formed.
+
+The empirical universe is the multi-asset configuration supplied with the implementation. It is composed of exchange-traded instruments representing US equities, US sectors, international equities, fixed income, commodities, currencies, and real estate. The development-stage data-quality filter leaves 56 instruments. The exact surviving tickers are:
+\begin{quote}
+SPY, QQQ, IWM, DIA, MDY, XLK, XLF, XLE, XLV, XLY, XLP, XLI, XLB, XLU, EFA, EEM, EWJ, EWG, EWU, EWZ, EWY, EWT, FXI, EWA, EWC, EWH, EWS, EWW, EZU, VGK, TLT, IEF, SHY, IEI, TIP, LQD, AGG, HYG, MUB, EMB, BND, GLD, SLV, USO, DBC, DBA, UNG, DBB, UUP, FXE, FXY, FXB, FXA, FXC, VNQ, IYR
+\end{quote}
+
+The universe is not presented as a point-in-time security master. In particular, it should not be interpreted as a survivorship-free reconstruction of every instrument that existed during the historical interval. This distinction is important because a model can appear stronger when instruments that failed to survive until the present are systematically absent.
+
+\section{Data Acquisition, Alignment, and Quality Control}
+
+The implementation retrieves adjusted Open, High, Low, Close, and Volume observations through \texttt{yfinance}. The run manifest records \texttt{yfinance} version 0.2.66, Python 3.13.15, NumPy 2.1.3, pandas 2.2.3, SciPy 1.16.3, PyTorch 2.11.0+cu128, and Matplotlib 3.10.0. The recorded data hash is \texttt{ec4bb0bf190e185e}. The code uses \texttt{auto\_adjust=True}, so the OHLC series used in the feature calculations are adjusted by the data provider's convention.
+
+The configured download interval begins on 1 January 2008 and ends on 31 December 2025, but the development-stage universe construction produces a common usable interval from 24 June 2008 through 30 December 2022. The development stage is deliberately truncated at the configured holdout boundary of 1 January 2023. Consequently, the dates after that boundary are not part of the numerical results reported here.
+
+Let $C_{i,t}$ denote the adjusted close of asset $i$ at date $t$. The daily close-to-close return is
+\begin{equation}
+r_{i,t}=\frac{C_{i,t}}{C_{i,t-1}}-1.
+\end{equation}
+The master calendar contains dates for which at least half of the downloaded instruments have an observation. Each candidate asset is then evaluated against this calendar. The supplied quality rule requires coverage of at least 99.5 percent, a first valid observation within the first ten calendar rows, and strictly positive prices. Missing observations are forward-filled for no more than three sessions; volume is filled with zero where required by the alignment routine, and remaining Open, High, and Low gaps are filled from Close.
+
+The resulting panel contains 3,657 common observations and 56 assets. The equal-weight universe itself has an annualized return of 5.0951 percent, annualized volatility of 14.3928 percent, and Sharpe ratio of 0.3540 over the development interval. These figures are not a benchmark for RAN's trading strategy; they describe the underlying equal-weight panel and provide a reference for the scale of the data.
+
+\begin{table}[tbp]
+\centering
+\caption{Development-stage data panel recorded by the experiment.}
+\begin{tabular}{lr}
+\toprule
+Number of assets & 56\\
+Number of common sessions & 3,657\\
+First usable date & 2008-06-24\\
+Last usable date & 2022-12-30\\
+Number of asset classes & 7\\
+Equal-weight annualized return & 5.0951\%\\
+Equal-weight annualized volatility & 14.3928\%\\
+Equal-weight Sharpe & 0.3540\\
+Configured holdout boundary & 2023-01-01\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Feature Engineering}
+
+The feature system is designed to combine local price dynamics, volatility, intraday structure, liquidity, relative position within the cross-section, and dependence on the aggregate market. Every feature used for a decision date $t$ is computable from observations dated $t$ or earlier. This causality condition is more important than the particular feature list because it defines the information set available to the model.
+
+For each asset, the base feature vector contains 27 quantities. For lags $\ell\in\{1,3,5,10,20\}$, three price-change families are constructed:
+\begin{equation}
+\mathrm{ret}_{\ell,t}=\frac{C_t}{C_{t-\ell}}-1,
+\end{equation}
+\begin{equation}
+\mathrm{high\_ret}_{\ell,t}=\frac{H_t}{H_{t-\ell}}-1,
+\end{equation}
+and
+\begin{equation}
+\mathrm{low\_ret}_{\ell,t}=\frac{L_t}{L_{t-\ell}}-1.
+\end{equation}
+These fifteen variables encode recent movement in the close, high, and low series at multiple scales.
+
+Realized volatility is calculated as a rolling standard deviation of daily returns. For $w\in\{5,20,60\}$,
+\begin{equation}
+\mathrm{vol}_{w,t}
+=
+\operatorname{sd}(r_{t-w+1},\ldots,r_t).
+\end{equation}
+The inclusion of several windows allows the network to distinguish a short-lived volatility shock from a persistent change in the local volatility environment.
+
+Relative price strength is also represented by the fourteen-period RSI. With $\Delta C_t=C_t-C_{t-1}$,
+\begin{equation}
+U_t=\max(\Delta C_t,0),\qquad
+D_t=\max(-\Delta C_t,0),
+\end{equation}
+and
+\begin{equation}
+\mathrm{RSI}_t=
+100-
+\frac{100}
+{1+\frac{\mathrm{MA}_{14}(U)_t}
+{\mathrm{MA}_{14}(D)_t+10^{-6}}}.
+\end{equation}
+The small numerical constant prevents division by zero and is an implementation detail rather than an economic parameter.
+
+The order-flow proxy used in the implementation is
+\begin{equation}
+\mathrm{OFI}_t=
+\frac{\mathrm{MA}_{5}(\Delta C_t\Delta V_t)}
+{\mathrm{MA}_{5}(V_t)+10^{-6}},
+\end{equation}
+where $V_t$ is volume. It should be interpreted as a price-volume interaction proxy, not as a reconstruction of exchange-level order flow.
+
+Two longer-horizon momentum variables are defined from cumulative daily returns:
+\begin{equation}
+\mathrm{mom}_{60,5,t}
+=
+\sum_{j=0}^{59}r_{t-j}
+-
+\sum_{j=0}^{4}r_{t-j},
+\end{equation}
+and
+\begin{equation}
+\mathrm{mom}_{120,20,t}
+=
+\sum_{j=0}^{119}r_{t-j}
+-
+\sum_{j=0}^{19}r_{t-j}.
+\end{equation}
+The construction is deliberately different from simply using a single trailing return: it separates a longer cumulative movement from the most recent short component.
+
+Intraday structure is represented through
+\begin{equation}
+\mathrm{overnight}_t=\frac{O_t}{C_{t-1}}-1
+\end{equation}
+and
+\begin{equation}
+\mathrm{intraday}_t=\frac{C_t}{O_t}-1,
+\end{equation}
+together with their twenty-session moving averages. Liquidity is represented by a rolling Amihud-style measure,
+\begin{equation}
+\mathrm{amihud}_t=
+\mathrm{MA}_{20}
+\left(
+\frac{|r_t|}{C_tV_t}
+\right).
+\end{equation}
+
+The second part of the feature system introduces cross-sectional information. Let $\mathcal{J}$ denote the 22 base features that are not direct \texttt{ret\_} variables. For each such feature $j$, the cross-sectional standardized value is
+\begin{equation}
+z_{i,t,j}
+=
+\frac{x_{i,t,j}-\bar{x}_{t,j}}
+{\operatorname{sd}_i(x_{\cdot,t,j})+10^{-9}}.
+\end{equation}
+Four additional cross-sectional percentile ranks are calculated for five-day return, twenty-day return, and the two momentum features. Market-relative momentum is constructed from the equal-weight market return
+\begin{equation}
+m_t=\frac{1}{A}\sum_{i=1}^{A}r_{i,t},
+\end{equation}
+giving
+\begin{equation}
+\mathrm{excess\_mom}_{\ell,t}
+=
+\sum_{j=0}^{\ell-1}(r_{t-j}-m_{t-j}),
+\qquad
+\ell\in\{5,20,60\}.
+\end{equation}
+Finally, a 60-session rolling beta is computed as
+\begin{equation}
+\beta_{60,i,t}
+=
+\frac{\widehat{\operatorname{Cov}}_{60}(r_i,m)}
+{\widehat{\operatorname{Var}}_{60}(m)+10^{-9}}.
+\end{equation}
+
+The total dimension is therefore
+\begin{equation}
+27+22+4+3+1=57.
+\end{equation}
+Rows preceding the availability of the longest feature history are removed during the warm-up stage.
+
+\section{Information Set and Normalization}
+
+Let $\mathcal{R}_w$ denote the feature rows available to walk-forward window $w$ for the purpose of estimating normalization parameters. The implementation estimates a mean $\mu_j$ and standard deviation $s_j$ separately for each feature using only the historical rows belonging to that training block. The transformed feature is
+\begin{equation}
+\tilde{x}_{i,t,j}
+=
+\operatorname{clip}
+\left(
+\frac{x_{i,t,j}-\mu_j}{s_j+10^{-6}},
+-5,5
+\right),
+\end{equation}
+with remaining non-finite values replaced by zero after the transformation.
+
+This operation is deliberately different from computing a global normalization over the entire dataset. A global mean and standard deviation would permit the statistical distribution of future observations to influence historical model inputs. In a chronological financial experiment, that would be a form of look-ahead even if the model itself never directly received future prices.
+
+The training target is also transformed. For each date, the realized forward returns are standardized across the asset universe:
+\begin{equation}
+\tilde{y}_{i,t}
+=
+\frac{y_{i,t}-\bar{y}_t}
+{\operatorname{sd}_i(y_{\cdot,t})+10^{-6}}.
+\end{equation}
+This target transformation makes the optimization problem explicitly cross-sectional. The evaluation stage, however, uses the original raw forward returns so that the portfolio statistics retain their economic interpretation.
+
+\section{Formal Definition of the Prediction Problem}
+
+Let $L=60$ denote the temporal window length. At decision date $t$, the model input for asset $i$ is
+\begin{equation}
+X_{i,t}
+=
+\left[
+\tilde{x}_{i,t-L+1},
+\ldots,
+\tilde{x}_{i,t}
+\right]
+\in\mathbb{R}^{L\times F},
+\end{equation}
+where $F=57$. Stacking all $A$ assets gives
+\begin{equation}
+X_t\in\mathbb{R}^{A\times L\times57}.
+\end{equation}
+
+The target corresponding to horizon $H$ and execution lag $\ell_x=1$ is
+\begin{equation}
+y_{i,t}^{(H)}
+=
+\frac{C_{i,t+1+H}}{C_{i,t+1}}-1.
+\end{equation}
+The label span is therefore
+\begin{equation}
+\sigma=\ell_x+H.
+\end{equation}
+A target is undefined whenever the future close required by this expression is unavailable.
+
+The model is a function
+\begin{equation}
+s_t=f_\theta(X_t,A_t),
+\end{equation}
+where $A_t$ is the causal asset graph and $\theta$ denotes the trainable parameters. The optimization target is not the portfolio return itself; it is a combination of cross-sectional prediction error and cross-sectional correlation:
+\begin{equation}
+\mathcal{L}(\theta)
+=
+\frac{1}{BA}
+\sum_{t=1}^{B}\sum_{i=1}^{A}
+(s_{i,t}-\tilde y_{i,t})^2
++
+\lambda
+\left[
+1-\frac{1}{B}\sum_{t=1}^{B}
+\rho(s_t,\tilde y_t)
+\right],
+\end{equation}
+where $\lambda=2$ and
+\begin{equation}
+\rho(s,y)
+=
+\frac{
+\sum_i(s_i-\bar s)(y_i-\bar y)
+}{
+\|s-\bar s\|_2\|y-\bar y\|_2+10^{-8}
+}.
+\end{equation}
+
+The MSE term constrains the numerical score representation, while the correlation term makes the objective sensitive to the relative ordering of assets. Because the downstream portfolio uses only the top and bottom score ranks, the second term is particularly aligned with the final decision rule.
+
+\section{Dynamic Correlation Graph}
+
+The graph is recomputed at every usable date. Let
+\begin{equation}
+R_t=
+\left[
+r_{i,t-L+1:t}
+\right]_{i=1}^{A}
+\end{equation}
+be the matrix of trailing returns. Each asset's vector is standardized over the window:
+\begin{equation}
+z_{i,t,\tau}
+=
+\frac{r_{i,t-L+\tau}-\bar r_{i,t}}
+{\operatorname{sd}(r_{i,t-L+1:t})+10^{-8}}.
+\end{equation}
+The sample correlation matrix is then formed by
+\begin{equation}
+C_t
+=
+\frac{1}{L}Z_t^\top Z_t.
+\end{equation}
+
+For each asset $i$, let $\mathcal{N}_K(i)$ be the $K=10$ assets having the largest correlations with $i$, excluding $i$ itself. The raw directed adjacency is
+\begin{equation}
+\breve A_{ij,t}
+=
+\begin{cases}
+\max(C_{ij,t},0), & j\in\mathcal{N}_{10}(i),\\
+0, & \text{otherwise}.
+\end{cases}
+\end{equation}
+The adjacency is symmetrized:
+\begin{equation}
+\bar A_t
+=
+\frac{1}{2}
+(\breve A_t+\breve A_t^\top),
+\end{equation}
+and row-normalized:
+\begin{equation}
+\tilde A_t
+=
+D_t^{-1}\bar A_t,
+\qquad
+D_t=\operatorname{diag}(\bar A_t\mathbf 1).
+\end{equation}
+
+The implementation stores only neighbour indices and weights rather than a dense graph for every date. This is computationally important because a dense $A\times A$ matrix scales quadratically with the number of assets. The graph is also causal: every edge at date $t$ is determined solely by returns up to date $t$.
+
+The conceptual justification for the graph stage is related to graph convolutional networks, where node representations are updated by aggregating information from neighbouring nodes \citep{kipf2017}. RAN does not attempt to reproduce the exact spectral derivation of the original GCN. It uses a lightweight residual aggregation rule tailored to a dynamically changing cross-sectional financial graph.
+
+\section{Temporal Encoder}
+
+The temporal encoder applies the same weights to every asset. This parameter sharing is important: RAN does not learn a separate neural network for each ticker. Instead, the model learns a common mapping from a 60-session feature history to a latent representation.
+
+Let $u^{(0)}_{i,\tau}=X_{i,t,\tau,:}$. For layer $m$ with dilation $d_m\in\{1,2,4\}$,
+\begin{equation}
+u^{(m)}_{i,\tau}
+=
+\operatorname{ReLU}
+\left(
+b_m+
+\sum_{k=0}^{2}
+W_m^{(k)}
+u^{(m-1)}_{i,\tau-(2-k)d_m}
+\right),
+\end{equation}
+where positions earlier than the beginning of the sequence are treated as zero. The three layers therefore have a total receptive field
+\begin{equation}
+1+2(1+2+4)=15.
+\end{equation}
+
+The implementation realizes this causal construction using padded PyTorch convolutions followed by trimming of the right-side padded outputs. The architecture is consistent with the broader evidence that temporal convolutional networks can provide effective sequence representations and competitive memory relative to recurrent architectures \citep{bai2018}.
+
+After the final convolution, temporal mean pooling gives
+\begin{equation}
+h_i^{(0)}
+=
+\frac{1}{L}
+\sum_{\tau=1}^{L}
+u^{(3)}_{i,\tau}
+\in\mathbb{R}^{32}.
+\end{equation}
+At this point, each asset has a compact representation of its recent local state, but the assets have not yet exchanged information.
+
+\section{Graph Convolution and Score Formation}
+
+Let $H^{(0)}\in\mathbb{R}^{A\times32}$ contain the temporal embeddings. Self-loops are introduced and the adjacency is normalized again:
+\begin{equation}
+\hat A_t
+=
+\operatorname{diag}
+\left[
+(\tilde A_t+I)\mathbf 1
+\right]^{-1}
+(\tilde A_t+I).
+\end{equation}
+The graph representation is then
+\begin{equation}
+H^{(1)}
+=
+\operatorname{ReLU}
+\left(
+\hat A_tH^{(0)}W_g+\mathbf 1b_g^\top
+\right)
++
+H^{(0)}.
+\end{equation}
+The residual term is important because it allows the model to preserve the independently encoded asset representation even when the graph aggregation is not useful.
+
+The ablation named \texttt{ran\_nograph} removes this operation by setting
+\begin{equation}
+H^{(1)}=H^{(0)}.
+\end{equation}
+This creates a direct empirical test of whether the graph stage adds predictive value beyond the feature system and temporal encoder.
+
+During training, dropout with probability $p=0.5$ is applied before the shared linear score head:
+\begin{equation}
+s_{i,t}
+=
+w^\top
+\operatorname{Dropout}(H^{(1)}_i)+b.
+\end{equation}
+With $F=57$ and hidden dimension $d=32$, the parameter count is
+\begin{equation}
+3(3Fd)+2(3d^2)+d^2+d+d+1=12,801,
+\end{equation}
+where the expression accounts for the convolutional weights and biases, graph transformation, and final score head under the implementation's parameterization.
+
+\section{Training Procedure}
+
+The model is trained with Adam using learning rate $10^{-3}$ and coupled $L_2$ weight decay of $10^{-3}$. Training is performed for at most 15 epochs, with a cosine-annealed learning-rate schedule. Each batch contains 32 chronological dates sampled in random order within the training block. Gradient norms are clipped at one. Gaussian input noise with standard deviation 0.1 is added during optimization.
+
+The validation criterion is mean daily rank IC. After each epoch, the model is evaluated on the chronological validation block. The parameter state with the highest validation rank IC is retained, and training stops after three consecutive epochs without improvement. This prevents the test interval from becoming an implicit hyperparameter-selection set.
+
+Five independently seeded networks are trained per walk-forward window. Their predictions are averaged:
+\begin{equation}
+\bar s_{i,t}
+=
+\frac{1}{S}
+\sum_{k=1}^{S}s_{i,t}^{(k)},
+\qquad S=5.
+\end{equation}
+The use of a small seed ensemble is intended to reduce optimization variance without materially changing the architecture.
+
+\begin{algorithm}[tbp]
+\caption{Leak-free walk-forward RAN evaluation}
+\begin{algorithmic}[1]
+\State Download adjusted OHLCV data and construct the common calendar.
+\State Apply the history, coverage, and positive-price filters.
+\State Compute the 57-dimensional causal feature panel.
+\State Construct the rolling ten-neighbour correlation graph.
+\State Remove the feature warm-up interval.
+\For{each horizon $H\in\{10,20,60\}$}
+    \For{each walk-forward test start $t_s$}
+        \State Define candidate training observations whose labels are fully realized by $t_s$.
+        \State Split the latest 20 percent of candidates into chronological validation data.
+        \State Purge the fit block by the label span $\sigma=H+1$.
+        \State Estimate feature normalization statistics on the historical training block only.
+        \For{each of five random seeds}
+            \State Train the temporal--graph network using MSE plus correlation loss.
+            \State Select the epoch with maximum validation rank IC.
+        \EndFor
+        \State Average the five seed predictions on the test block.
+        \State Rank assets and form the 10 percent long / 10 percent short tranche.
+        \State Apply the one-day execution lag, $H$-session holding rule, costs, and borrow.
+    \EndFor
+    \State Compute IC, ICIR, HAC test statistics, Sharpe, drawdown, bootstrap intervals, and permutation tests.
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+The algorithm above is not pseudocode added independently of the experiment; it is a compact formal representation of the execution logic implemented by the supplied research code.
+
+\section{Walk-Forward Design and No-Look-Ahead Argument}
+
+The training window contains 1,008 observations and advances by 126 observations. Let $s_0=L$ denote the first usable model row. For a test start $t_s$, the candidate set consists of rows that remain inside the rolling training window and whose target has been completely realized by $t_s$. The final 20 percent of that candidate set forms the validation interval.
+
+If $v_0$ denotes the first validation row, the fit set is restricted to
+\begin{equation}
+i\leq v_0-\sigma,
+\end{equation}
+where $\sigma=H+\ell_x$. This purge ensures that no fit label depends on a price occurring after the validation boundary.
+
+The test interval begins at $t_s$ and extends for the 126-session step. Test features are computed using information through each test date, while the portfolio is executed at the subsequent close. The training model is then frozen for that entire test block. The procedure repeats chronologically.
+
+The no-look-ahead argument follows directly. A training sample at $i$ has label prices no later than $i+\sigma\leq t_s$, while its features and graph depend only on observations no later than $i$. Validation samples are similarly separated from the fit set. Test samples use current and historical features, and their future returns are not used until after the model decision. Thus, conditional on the integrity of the downloaded historical data, the numerical pipeline is causal with respect to the specified information set.
+
+\section{Baselines}
+
+The experiment evaluates RAN against five controls. The first is the graph ablation, \texttt{ran\_nograph}, which retains the same feature system and temporal encoder while eliminating cross-asset graph aggregation. The second is Ridge regression. Ridge uses the normalized last-day feature vector and selects its regularization parameter from a fixed grid using validation rank IC. The third is a 120-minus-20-session momentum score. The fourth is five-session reversal, implemented as the negative five-session return. The fifth is a random-score null control.
+
+The baseline design is useful because an apparent advantage over random scores is not enough to demonstrate that the architecture is adding value. A neural model should also be compared with a regularized linear model and with simple economically interpretable signals. In this experiment, the graph ablation is especially informative because it holds most of the representation system constant while removing one architectural component.
+
+\section{Portfolio Mapping}
+
+The trading layer converts cross-sectional scores into a dollar-neutral portfolio. Let
+\begin{equation}
+k=\max(1,\operatorname{round}(qA)),
+\qquad q=0.10.
+\end{equation}
+The $k$ highest scores receive positive weights and the $k$ lowest scores receive negative weights:
+\begin{equation}
+w_{i,t}
+=
+\begin{cases}
++\dfrac{1}{2k}, & i\in\operatorname{Top}_k(s_t),\\[5pt]
+-\dfrac{1}{2k}, & i\in\operatorname{Bottom}_k(s_t),\\[5pt]
+0, & \text{otherwise}.
+\end{cases}
+\end{equation}
+Therefore,
+\begin{equation}
+\sum_iw_{i,t}=0
+\end{equation}
+and
+\begin{equation}
+\sum_i|w_{i,t}|=1.
+\end{equation}
+
+The portfolio uses staggered tranches. A tranche opened at $t$ is held for $H$ sessions, while new tranches are opened on subsequent dates. The gross return of tranche $t$ is
+\begin{equation}
+g_t=\sum_iw_{i,t}y_{i,t}.
+\end{equation}
+Turnover is measured relative to the tranche it replaces:
+\begin{equation}
+\tau_t=\sum_i|w_{i,t}-w_{i,t-H}|.
+\end{equation}
+The supplied cost model is
+\begin{equation}
+c=5\times10^{-4}
+\end{equation}
+per unit traded notional and
+\begin{equation}
+b_H=
+\frac12
+(50\times10^{-4})
+\frac{H}{252}.
+\end{equation}
+The net tranche return is therefore
+\begin{equation}
+r_t=g_t-c\tau_t-b_H.
+\end{equation}
+
+Because the weights depend only on rank membership, any strictly increasing transformation of the scores leaves the portfolio unchanged. This property makes calibration of the absolute score scale unnecessary for the trading experiment.
+
+Annualized statistics use $252/H$ periods per year:
+\begin{equation}
+SR=
+\frac{\bar r}{\operatorname{sd}(r)}
+\sqrt{\frac{252}{H}},
+\end{equation}
+\begin{equation}
+R_{\mathrm{ann}}
+=
+\bar r\frac{252}{H},
+\end{equation}
+and
+\begin{equation}
+\sigma_{\mathrm{ann}}
+=
+\operatorname{sd}(r)
+\sqrt{\frac{252}{H}}.
+\end{equation}
+
+\section{Statistical Inference}
+
+The principal predictive statistic is the daily rank information coefficient,
+\begin{equation}
+IC_t
+=
+\rho
+\left(
+\operatorname{rank}(s_t),
+\operatorname{rank}(y_t)
+\right),
+\end{equation}
+with sample mean
+\begin{equation}
+\overline{IC}
+=
+\frac1n\sum_{t=1}^{n}IC_t
+\end{equation}
+and
+\begin{equation}
+ICIR=
+\frac{\overline{IC}}
+{\operatorname{sd}(IC_t)}.
+\end{equation}
+The rank formulation is consistent with the portfolio construction because both discard monotonic transformations of the score.
+
+For $H>1$, adjacent forward-return labels overlap. Consequently, adjacent IC observations can be serially dependent. The experiment uses a Newey--West HAC estimator \citep{neweywest1987}. With lag-$\ell$ autocovariance $\hat\gamma_\ell$ and bandwidth $H$,
+\begin{equation}
+\widehat{\sigma}_{NW}^{2}
+=
+\hat\gamma_0+
+2\sum_{\ell=1}^{H}
+\left(1-\frac{\ell}{H+1}\right)
+\hat\gamma_\ell,
+\end{equation}
+and
+\begin{equation}
+t_{NW}
+=
+\frac{\overline{IC}}
+{\sqrt{\widehat{\sigma}_{NW}^{2}/n}}.
+\end{equation}
+The reported one-sided probability evaluates the hypothesis that the mean rank IC is positive.
+
+The stationary bootstrap follows the construction of Politis and Romano \citep{politisromano1994}. The block length is selected as
+\begin{equation}
+L_b=\max(2H,5),
+\end{equation}
+so that the bootstrap resampling preserves dependence over a horizon comparable to the overlapping holding period. The experiment uses 2,000 bootstrap draws.
+
+Paired bootstrap comparisons use the same resampled indices for the two strategies being compared. This matters because all strategies trade the same underlying observations. An independent bootstrap would destroy much of the paired dependence and could overstate the uncertainty of a difference.
+
+The probabilistic Sharpe ratio follows the framework of Bailey and Lopez de Prado \citep{bailey2012}. On a non-overlapping return subsample, the statistic is
+\begin{equation}
+PSR=
+\Phi
+\left[
+\frac{
+(\widehat{SR}-SR^\ast)\sqrt{n-1}
+}{
+\sqrt{
+1-\hat\gamma_3\widehat{SR}
++
+\frac{\hat\gamma_4-1}{4}\widehat{SR}^2
+}
+}
+\right],
+\end{equation}
+where $SR^\ast=0$ in the supplied analysis.
+
+The permutation test constructs a null distribution by independently permuting asset identities within each non-overlapping observation date. If $B$ permutations are generated,
+\begin{equation}
+p=
+\frac{
+1+\#\{b:SR_b^{null}\geq SR_{obs}\}
+}{
+1+B
+}.
+\end{equation}
+This test asks whether the observed ranking-based portfolio statistic is unusually large relative to a null in which the cross-sectional assignment of scores carries no information about future returns.
+
+Finally, the one-sided IC $p$-values across the model--horizon family are adjusted using Holm's sequentially rejective procedure \citep{holm1979}. Multiple-testing correction does not remove all forms of research overfitting, but it provides a formal control for the specified family of hypothesis tests.
+
+\section{Empirical Results}
+
+Table~\ref{tab:primary} presents the primary raw RAN results. The 10-session horizon produces a mean rank IC of 0.0923, ICIR of 0.259, Newey--West $t$ statistic of 5.20, gross Sharpe of 0.650, and net Sharpe of 0.556. Its annualized net return is 5.01 percent with annualized volatility of 9.01 percent and maximum drawdown of -17.67 percent.
+
+The 20-session horizon produces the highest mean rank IC, 0.1159, with ICIR 0.327 and Newey--West $t=4.71$. The gross and net Sharpe ratios are 0.601 and 0.521. The annualized net return is 4.67 percent, with annualized volatility 8.97 percent and maximum drawdown -15.66 percent.
+
+The 60-session horizon produces mean rank IC 0.0807 and ICIR 0.245. Its net Sharpe is 0.156, substantially below the shorter horizons. The corresponding annualized net return is 1.34 percent, annualized volatility is 8.61 percent, and maximum drawdown is -12.45 percent.
+
+\begin{table}[tbp]
+\centering
+\small
+\caption{Primary RAN development results. The Sharpe ratio is calculated on the staggered tranche return series.}
+\label{tab:primary}
+\begin{tabular}{rrrrrrrrrr}
+\toprule
+$H$ & IC & ICIR & $t_{NW}$ & Holm $p$ & Gross SR & Net SR & Ann. Ret. & Ann. Vol. & Max DD\\
+\midrule
+10 & 0.0923 & 0.259 & 5.20 & 1.5e-06 & 0.650 & 0.556 & 5.01\% & 9.01\% & -17.67\% \\
+20 & 0.1159 & 0.327 & 4.71 & 1.6e-05 & 0.601 & 0.521 & 4.67\% & 8.97\% & -15.66\% \\
+60 & 0.0807 & 0.234 & 2.13 & 0.094 & 0.216 & 0.156 & 1.34\% & 8.62\% & -12.45\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure~\ref{fig:cumulative} shows the cumulative net return curves generated by the experiment. The figure is important because a single Sharpe ratio compresses the temporal path of the strategy into one number. The plotted trajectories show how the realized P\&L evolves through different market environments and make drawdown periods visible. The curves should nevertheless be interpreted as historical development paths rather than evidence that the same trajectory will recur.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=.96\textwidth]{fig1_cumulative_net_return.pdf}
+\caption{\textbf{Cumulative net return.} The figure plots the cumulative evolution of the net staggered long--short portfolio for the evaluated model configurations. Net returns include the supplied transaction-cost and short-borrow assumptions. The plot is descriptive: it shows realized development-stage path behavior and does not by itself establish statistical significance or future persistence.}
+\label{fig:cumulative}
+\end{figure}
+
+\subsection{Comparison with Baselines}
+
+Table~\ref{tab:comparison} compares the complete RAN model with the no-graph ablation and three conventional ranking baselines. At ten sessions, RAN has rank IC 0.0923 compared with 0.0907 for the no-graph model, 0.0416 for Ridge, 0.0367 for momentum, and approximately zero for reversal and random ranking. At twenty sessions, the corresponding RAN rank IC is 0.1159, while the no-graph model reaches 0.1124 and Ridge reaches 0.0660. At sixty sessions, the full model has rank IC 0.0807, while Ridge remains a meaningful comparator.
+
+\begin{table}[tbp]
+\centering
+\small
+\caption{Raw-score comparison across models and holding horizons.}
+\label{tab:comparison}
+\begin{tabular}{rllrrr}
+\toprule
+$H$ & Model & Rank IC & Net SR & Ann. Ret. & Max DD\\
+\midrule
+10 & RAN (CNN+GCN) & 0.0923 & 0.556 & 5.01\% & -17.67\% \\
+10 & RAN w/o graph & 0.0907 & 0.488 & 4.32\% & -16.71\% \\
+10 & Ridge & 0.0416 & -0.146 & -1.30\% & -23.81\% \\
+10 & Momentum (120-20d) & 0.0367 & -0.054 & -0.49\% & -28.16\% \\
+10 & Reversal (5d) & -0.0014 & -0.303 & -2.75\% & -27.78\% \\
+10 & Random & 0.0033 & -0.472 & -2.05\% & -19.93\% \\
+20 & RAN (CNN+GCN) & 0.1159 & 0.521 & 4.67\% & -15.66\% \\
+20 & RAN w/o graph & 0.1124 & 0.519 & 4.62\% & -16.36\% \\
+20 & Ridge & 0.0660 & 0.088 & 0.75\% & -15.28\% \\
+20 & Momentum (120-20d) & 0.0528 & 0.004 & 0.04\% & -25.34\% \\
+20 & Reversal (5d) & 0.0041 & -0.152 & -1.29\% & -17.22\% \\
+20 & Random & 0.0003 & -0.209 & -0.91\% & -9.25\% \\
+60 & RAN (CNN+GCN) & 0.0807 & 0.156 & 1.34\% & -12.45\% \\
+60 & RAN w/o graph & 0.0736 & 0.189 & 1.59\% & -15.98\% \\
+60 & Ridge & 0.1325 & 0.408 & 3.61\% & -9.04\% \\
+60 & Momentum (120-20d) & 0.0833 & 0.198 & 1.73\% & -12.19\% \\
+60 & Reversal (5d) & -0.0115 & -0.101 & -0.83\% & -11.14\% \\
+60 & Random & -0.0003 & -0.100 & -0.44\% & -4.57\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The graph ablation provides the cleanest architectural comparison. The paired bootstrap difference in rank IC between RAN and RAN without the graph is 0.0016 at ten sessions, with a 95 percent paired interval from -0.0046 to 0.0082. The corresponding Sharpe difference is 0.0683 with interval [-0.0553, 0.2069]. At twenty sessions, the IC difference is 0.0035 with interval [-0.0068, 0.0146], while the Sharpe difference is only 0.0020 with interval [-0.1510, 0.1449].
+
+\begin{table}[tbp]
+\centering
+\small
+\caption{Paired bootstrap comparison of RAN and the no-graph ablation.}
+\begin{tabular}{rrrrrrr}
+\toprule
+$H$ & $\Delta IC$ & 95\% CI & $p$ & $\Delta SR$ & 95\% CI & $p$\\
+\midrule
+10 & 0.0016 & [-0.0046,0.0082] & 0.321 & 0.0683 & [-0.0553,0.2069] & 0.139 \\
+20 & 0.0035 & [-0.0068,0.0146] & 0.281 & 0.0020 & [-0.1510,0.1449] & 0.526 \\
+60 & 0.0071 & [-0.0221,0.0434] & 0.364 & -0.0336 & [-0.2211,0.1139] & 0.697 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+These comparisons are central to the interpretation of the model. The full network has a more complicated inductive structure than the ablation, but the present experiment does not provide strong evidence that the graph itself creates a large incremental advantage at ten or twenty sessions. The result suggests that much of the predictive content may already be contained in the causal features and temporal encoder. That is an empirical observation about this experiment, not a general statement about graph methods.
+
+Figure~\ref{fig:forest} visualizes the Sharpe comparisons across the evaluated models. The figure is useful because it places the RAN result in the context of uncertainty rather than presenting it in isolation. It also makes clear that the apparent ordering among strategies varies with the horizon.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=.96\textwidth]{fig3_sharpe_forest_full.pdf}
+\caption{\textbf{Sharpe-ratio comparison.} The forest plot summarizes the Sharpe estimates and their bootstrap uncertainty across the model--horizon combinations evaluated by the research run. The comparison is intended to show both the magnitude of the point estimate and the width of the empirical uncertainty interval; it should not be read as a deterministic ranking of models.}
+\label{fig:forest}
+\end{figure}
+
+\subsection{Transaction Costs and Turnover}
+
+The supplied cost sensitivity experiment varies the transaction cost from zero to 20 basis points while leaving the remainder of the portfolio construction unchanged. Table~\ref{tab:cost} reports the net Sharpe ratios for RAN.
+
+\begin{table}[tbp]
+\centering
+\caption{RAN net Sharpe under alternative transaction-cost assumptions.}
+\label{tab:cost}
+\begin{tabular}{rrrrrr}
+\toprule
+$H$ & 0 bp & 2.5 bp & 5 bp & 10 bp & 20 bp\\
+\midrule
+10 & 0.622 & 0.589 & 0.556 & 0.491 & 0.359 \\
+20 & 0.574 & 0.547 & 0.521 & 0.469 & 0.364 \\
+60 & 0.187 & 0.171 & 0.156 & 0.124 & 0.062 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At the supplied default of five basis points, the net Sharpe ratios are 0.556, 0.521, and 0.156. At twenty basis points they become 0.359, 0.364, and 0.062. The decline demonstrates that the apparent economic value is not independent of execution assumptions. The effect is especially strong at the 60-session horizon because the underlying gross signal is already comparatively weak.
+
+Figure~\ref{fig:cost} provides the corresponding visual sensitivity curve. Its role is not merely aesthetic: it exposes whether a strategy is dependent on a narrow cost assumption. A gradual decline suggests some resilience to moderate cost misspecification, whereas a rapid collapse would indicate a highly friction-sensitive signal.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=.96\textwidth]{fig4_cost_sensitivity.pdf}
+\caption{\textbf{Transaction-cost sensitivity.} Net Sharpe is plotted against the assumed per-unit transaction cost. The curves are generated directly from the saved cost-sensitivity table and demonstrate how the economic result changes when execution friction is varied while model scores remain fixed.}
+\label{fig:cost}
+\end{figure}
+
+\subsection{Temporal Stability}
+
+A strong aggregate rank IC can conceal periods in which a model performs poorly. The annual diagnostic therefore reports rank IC and annualized net return by calendar year. The supplied 10-session RAN rank IC is particularly high in 2012, 2013, 2014, 2017, and 2019, while it becomes weak in 2018 and slightly negative in 2022. The 20-session horizon follows a related but not identical path.
+
+\begin{table}[tbp]
+\centering
+\small
+\caption{Annual RAN rank IC by horizon. The 10-session annualized net return is included as a reference for the corresponding calendar year.}
+\begin{tabular}{rrrrr}
+\toprule
+Year & IC$_{10}$ & Ann. Ret$_{10}$ & IC$_{20}$ & IC$_{60}$\\
+\midrule
+2012 & 0.170 & 17.48\% & 0.253 & 0.302 \\
+2013 & 0.126 & 5.46\% & 0.186 & -0.106 \\
+2014 & 0.114 & 10.49\% & 0.167 & 0.074 \\
+2015 & 0.066 & 6.14\% & 0.033 & -0.076 \\
+2016 & 0.057 & 4.66\% & 0.109 & 0.266 \\
+2017 & 0.191 & 12.92\% & 0.256 & 0.303 \\
+2018 & 0.025 & -4.21\% & 0.004 & -0.060 \\
+2019 & 0.162 & 12.38\% & 0.178 & 0.107 \\
+2020 & 0.058 & -2.31\% & 0.118 & 0.162 \\
+2021 & 0.102 & -1.09\% & 0.084 & 0.106 \\
+2022 & -0.003 & 2.03\% & -0.027 & -0.068 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure~\ref{fig:annual} summarizes this temporal variation. The visual distinction between strong and weak years is important because it prevents the full-sample mean from being interpreted as a constant structural property. In particular, the model's positive aggregate statistics coexist with periods in which the ranking signal is small or adverse.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=.96\textwidth]{fig5_annual_rank_ic.pdf}
+\caption{\textbf{Annual rank IC.} Calendar-year rank IC values for the RAN configurations show how the cross-sectional signal varies over time. The figure is a stability diagnostic rather than a claim that each year constitutes an independent experiment.}
+\label{fig:annual}
+\end{figure}
+
+The rolling rank IC in Figure~\ref{fig:rolling} provides a higher-frequency view. Rolling statistics are useful for identifying regime changes and prolonged weakening, although the overlap between adjacent rolling windows means the plotted observations are not independent. The figure should therefore be interpreted descriptively.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=.96\textwidth]{fig2_rolling_rank_ic.pdf}
+\caption{\textbf{Rolling rank IC.} Rolling rank IC traces the local predictive association between model scores and subsequent returns. The statistic is intentionally shown as a time series because a full-sample mean can obscure periods of degradation and recovery.}
+\label{fig:rolling}
+\end{figure}
+
+\subsection{Stress Episodes}
+
+The experiment defines several historically distinct stress episodes. Table~\ref{tab:stress} reports the RAN values available in the saved development output.
+
+\begin{table}[tbp]
+\centering
+\small
+\caption{RAN stress-episode diagnostics. Annualized net return is the portfolio statistic calculated over the episode using the experiment's annualization convention.}
+\label{tab:stress}
+\begin{tabular}{rlrrr}
+\toprule
+$H$ & Episode & Rank IC & Ann. Net Ret. & Rows\\
+\midrule
+10 & Aug-2015 / Feb-2016 stress & -0.003 & 3.00\% & 145 \\
+10 & Q4-2018 sell-off & -0.112 & -7.24\% & 63 \\
+10 & COVID crash (Feb-Apr 2020) & -0.010 & -62.65\% & 52 \\
+10 & 2022 rate-shock bear market & -0.003 & 2.03\% & 240 \\
+20 & Aug-2015 / Feb-2016 stress & -0.034 & 0.88\% & 145 \\
+20 & Q4-2018 sell-off & -0.104 & -3.87\% & 63 \\
+20 & COVID crash (Feb-Apr 2020) & 0.129 & -30.01\% & 52 \\
+20 & 2022 rate-shock bear market & -0.027 & -3.52\% & 230 \\
+60 & Aug-2015 / Feb-2016 stress & 0.035 & 7.43\% & 145 \\
+60 & Q4-2018 sell-off & 0.022 & 1.19\% & 63 \\
+60 & COVID crash (Feb-Apr 2020) & 0.313 & 16.08\% & 52 \\
+60 & 2022 rate-shock bear market & -0.068 & -2.08\% & 190 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The stress results are heterogeneous. During the Q4 2018 sell-off, the ten-session RAN rank IC is -0.112 and annualized net return is -7.24 percent. During the COVID crash, the ten-session rank IC is -0.010 and annualized net return is -62.65 percent, whereas the sixty-session configuration has a materially different response. This difference across horizons demonstrates why a single aggregate statistic is insufficient for understanding the model.
+
+The stress analysis therefore does not support a general claim that RAN is crisis-robust. Instead, it documents a horizon-dependent behavior that should be examined further in a dedicated regime study.
+
+\subsection{Decile Profile}
+
+The model's scores can be divided into ten cross-sectional deciles. If the model learns a smooth ranking relation rather than merely identifying the extreme tails, subsequent returns should vary systematically across the score distribution. Figure~\ref{fig:decile} shows the forward-return decile profile saved by the experiment.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=.92\textwidth]{fig7_decile_returns_ran.pdf}
+\caption{\textbf{Forward-return decile profile.} Assets are sorted by RAN score and divided into ten cross-sectional groups. The figure reports mean forward returns by score decile. Its purpose is to inspect the shape of the cross-sectional relationship rather than only the performance of the extreme long and short tails used in portfolio construction.}
+\label{fig:decile}
+\end{figure}
+
+A monotonic decile profile would provide evidence that the score contains information across the distribution, while a result concentrated only in the top and bottom groups would suggest a more threshold-like effect. The supplied figure should be considered together with the IC statistics because neither diagnostic alone establishes economic persistence.
+
+\subsection{Permutation Null}
+
+The permutation test provides a distribution-free null control. Asset identities are shuffled within non-overlapping observations so that the association between the score ordering and future asset returns is removed while preserving the cross-sectional return distribution.
+
+\begin{table}[tbp]
+\centering
+\caption{RAN permutation-test diagnostics.}
+\begin{tabular}{rrrr}
+\toprule
+$H$ & Gross SR & Median $p$ & Offset $p$ values\\
+\midrule
+10 & 0.584 & 0.032 & 0.036, 0.010, 0.032 \\
+20 & 0.574 & 0.037 & 0.037, 0.016, 0.039 \\
+60 & 0.278 & 0.188 & 0.125, 0.188, 0.244 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure~\ref{fig:perm} displays the corresponding null distribution. The ten-session RAN gross Sharpe is 0.584 with median permutation $p=0.032$, while the twenty-session gross Sharpe is 0.574 with median permutation $p=0.037$. These values indicate that the observed ranking statistic is relatively unusual under the specified within-day exchangeability null. They should not be interpreted as a substitute for an untouched out-of-sample experiment.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=.92\textwidth]{fig6_permutation_null_ran.pdf}
+\caption{\textbf{Permutation null distribution.} The distribution is generated by randomizing asset-score assignments within non-overlapping observations. The observed strategy statistic is shown against this null to assess whether the ranking-based portfolio is unusually strong under exchangeability.}
+\label{fig:perm}
+\end{figure}
+
+\section{Interpretation of the Architecture}
+
+The model can be understood as a sequence of increasingly structured representations. The raw data are first converted into features that describe each asset's local state. The temporal encoder then compresses the most recent 60 sessions into a common latent space. The graph stage introduces information from economically related instruments as represented by recent return correlations. Finally, the score head maps each relational representation into a scalar ranking statistic.
+
+This ordering is consequential. The graph is not constructed from the learned embeddings; it is constructed directly from recent returns. Therefore the graph provides an exogenous-to-the-network relational scaffold rather than a learned similarity metric. The graph changes through time as correlations change, but its construction remains transparent and reproducible.
+
+The residual graph layer also means that the network is not forced to use relational information. If aggregation is unhelpful, the residual pathway can preserve the temporal representation. This is consistent with the observed similarity between RAN and the no-graph ablation. The experiment suggests that graph information is compatible with the temporal representation but does not demonstrate that it is indispensable.
+
+The use of a ranking-oriented loss is equally important. A pure MSE objective would encourage numerical approximation of standardized returns. The correlation term instead encourages the ordering of scores to align with the ordering of forward returns. Because the portfolio construction uses only the extreme score ranks, this objective is more directly connected to the downstream decision problem.
+
+\section{Parameter Count and Computational Structure}
+
+The model's small parameter count is a deliberate feature. The first convolution maps 57 input channels into 32 hidden channels with a kernel of width three. The next two convolutions operate in the 32-dimensional hidden space. The graph transformation is a 32-to-32 linear map, followed by a one-dimensional score head.
+
+The computationally expensive part of the experiment is not the neural network parameter count itself. The dynamic graph construction requires rolling correlation matrices across the entire asset universe, while the walk-forward design repeatedly trains models over many chronological windows and horizons. The implementation therefore stores the graph sparsely as neighbour indices and weights and constructs dense adjacency tensors lazily for each batch.
+
+This separation between model size and experiment size is useful. A model can have only twelve thousand parameters while still requiring substantial computation because the experiment repeatedly evaluates it over thousands of cross-sectional dates, multiple horizons, multiple seeds, and multiple bootstrap/permutation procedures.
+
+\section{Reproducibility and Experimental Artifact}
+
+The run is accompanied by a configuration file, manifest, logs, scores, diagnostic window tables, CSV and LaTeX result tables, and publication figures. The manifest records the software environment and the data hash. The supplied configuration records the exact principal settings: 60-session windows, ten graph neighbours, hidden width 32, dropout 0.5, batch size 32, maximum 15 epochs, patience three, five seeds, learning rate $10^{-3}$, weight decay $10^{-3}$, Gaussian noise 0.1, IC-loss weight two, horizons 10/20/60, 1,008-session training windows, 126-session steps, 20 percent validation, one-session execution lag, ten percent tails, five basis points of transaction cost, fifty basis points annual borrow, 2,000 bootstrap draws, 1,000 permutations, and seed 42.
+
+The implementation also stores out-of-sample score arrays for every model-horizon combination. This is valuable because it allows future analysis to be performed on the saved predictions without silently retraining the model. In a research setting, preservation of the actual predictions is preferable to preserving only aggregate statistics because it permits independent reconstruction of rank ICs, portfolio weights, turnover, decile profiles, and alternative statistical tests.
+
+The supplied mathematical specification formalizes the same pipeline and explicitly notes that RAN contains no attention layer. The formal specification also proves the causality of the temporal encoder and the dollar-neutrality of the portfolio mapping. These properties are not inferred after observing the results; they follow from the algorithm itself.
+
+\section{Limitations}
+
+The first limitation is universe construction. The multi-asset ETF universe is practical and reproducible, but it is not a point-in-time database of all instruments that were investable at every historical date. The code itself warns that its S\&P 500 mode is survivorship-biased unless a point-in-time constituent file is supplied. Although the reported experiment uses the multi-asset universe rather than the default current S\&P 500 list, the historical universe should still not be treated as free from all selection effects.
+
+The second limitation is data provenance. \texttt{yfinance} is an open-source interface to Yahoo Finance rather than a dedicated institutional market-data vendor. Adjustments, historical revisions, missing values, and vendor-specific conventions can affect empirical results. Reproducing the experiment with an independent institutional data source would therefore be an important robustness test.
+
+The third limitation is the development-stage nature of the supplied results. The code supports a final stage in which the model is trained before a holdout boundary and then applied without retraining. However, the supplied archive does not contain that final run. The present paper therefore does not make a post-2023 out-of-sample claim. The development result must be regarded as an intermediate empirical finding.
+
+The fourth limitation concerns transaction costs. The model uses a fixed basis-point cost and fixed annualized borrow assumption. Actual costs depend on bid--ask spread, market impact, liquidity, order size, borrow availability, financing conditions, and execution timing. A future study should replace the stylized cost function with asset-specific liquidity and impact estimates.
+
+The fifth limitation is multiple research choices. The experiment evaluates several horizons and several models. Holm correction controls the specified family of one-sided IC tests, but it does not correct for every possible researcher degree of freedom that may exist before the recorded run. The literature on backtest overfitting emphasizes that repeated experimentation can generate apparently significant results even when the underlying process contains little predictive information \citep{bailey2017}.
+
+The sixth limitation concerns the graph itself. A high correlation between two assets does not imply an economic causal relationship. The graph is a statistical representation of recent co-movement, and it can change rapidly across regimes. The current experiment does not separately identify whether the graph learns economically meaningful transmission, common-factor exposure, or simply a useful regularization structure.
+
+The seventh limitation concerns overlapping observations. The Newey--West and bootstrap procedures address dependence induced by overlapping labels, but no finite-sample procedure completely removes the uncertainty created by a long historical research program. The effective independent observation count is substantially smaller than the raw row count for long holding horizons.
+
+\section{Discussion}
+
+The development results suggest three observations. First, the RAN pipeline generates a meaningful cross-sectional ranking signal under the specified causal protocol. The positive rank IC is not confined to a random-score null and survives the specified multiple-testing correction at the ten- and twenty-session horizons.
+
+Second, the economic translation from prediction to portfolio performance is highly sensitive to horizon. The twenty-session configuration has the highest average rank IC, but the ten-session configuration has the highest net Sharpe. This divergence illustrates why predictive metrics and portfolio metrics should both be reported. A model can rank assets well while still producing an unattractive portfolio because of turnover, volatility, or the temporal aggregation of returns.
+
+Third, the graph component remains an open empirical question. The full model's rank IC exceeds the no-graph model by only 0.0016 at ten sessions and 0.0035 at twenty sessions, and the paired intervals contain zero. Therefore the current data do not justify attributing the majority of the signal to relational aggregation. A stronger causal test would vary graph construction while holding every other component fixed: no graph, static graph, correlation graph, shrinkage correlation graph, factor graph, and learned graph. Such a study would reveal whether the graph is useful because of its topology, its edge weights, or merely the regularizing effect of aggregation.
+
+The results also emphasize the importance of simple baselines. Ridge has positive rank IC at every evaluated horizon, but its net portfolio performance is substantially weaker than RAN at ten and twenty sessions under the supplied cost model. This indicates that the nonlinear representation is potentially useful. At the same time, Ridge remains competitive at the longest horizon, which prevents the conclusion that the neural architecture dominates simpler methods universally.
+
+\section{Conclusion}
+
+This paper has formalized RAN as a causal temporal--graph model for cross-sectional asset ranking. The architecture begins with 57 causal features calculated from real adjusted OHLCV data, encodes each asset's recent 60-session history through a three-layer dilated convolutional network, constructs a ten-neighbour rolling correlation graph, aggregates information through a residual graph convolution, and produces a scalar score used to form a dollar-neutral long--short portfolio.
+
+The supplied development experiment covers 56 assets and 3,657 common sessions from June 2008 through December 2022. Under the specified five-basis-point transaction cost and fifty-basis-point annual borrow assumption, the ten-, twenty-, and sixty-session RAN configurations produce net Sharpe ratios of 0.556, 0.521, and 0.156, respectively. Mean rank IC is highest at twenty sessions, at 0.1159. The results remain positive over a range of transaction-cost assumptions, although the magnitude declines as costs increase.
+
+The strongest methodological conclusion is not that RAN has discovered a permanent trading edge. It is that the experiment provides a reproducible, explicitly causal framework in which such a claim can be tested. The no-graph ablation demonstrates that the present evidence does not isolate the graph as the source of predictive power. The stress tests demonstrate horizon-dependent behavior. The cost analysis demonstrates economic sensitivity. The development/final separation demonstrates that the supplied experiment was designed to permit an untouched holdout, but the absence of a saved final run prevents that test from being claimed here.
+
+The next empirical stage should therefore be a frozen final evaluation on the post-2023 holdout, performed exactly once after the research specification is fixed. A stronger version of the study would additionally use a point-in-time universe, an independent data vendor, asset-specific transaction-cost and borrow models, and a controlled graph ablation study. Those experiments would determine whether the observed development signal is robust to the principal sources of historical backtest uncertainty.
+
+\appendix
+
+\section{Complete Model Specification}
+
+For completeness, the entire RAN mapping can be summarized as follows. Given the adjusted OHLCV panel, construct the causal feature tensor
+\begin{equation}
+X^{raw}\in\mathbb{R}^{T\times A\times57}.
+\end{equation}
+For each walk-forward window, estimate $(\mu_j,s_j)$ from the historical training block and transform the feature tensor using
+\begin{equation}
+X_{i,t,j}
+=
+\operatorname{clip}
+\left(
+\frac{X^{raw}_{i,t,j}-\mu_j}{s_j+10^{-6}},
+-5,5
+\right).
+\end{equation}
+Construct the trailing return matrix and correlation graph, producing sparse neighbour indices $\mathcal{N}_{10}(i)$ and weights $a_{ij,t}$. For each date, extract
+\begin{equation}
+X_t\in\mathbb{R}^{A\times60\times57}.
+\end{equation}
+Apply the causal convolutional encoder:
+\begin{align}
+U^{(1)}&=\operatorname{ReLU}(\operatorname{Conv}_{3,d=1}(X_t)),\\
+U^{(2)}&=\operatorname{ReLU}(\operatorname{Conv}_{3,d=2}(U^{(1)})),\\
+U^{(3)}&=\operatorname{ReLU}(\operatorname{Conv}_{3,d=4}(U^{(2)})).
+\end{align}
+Pool:
+\begin{equation}
+H^{(0)}_i=\frac1{60}\sum_{\tau=1}^{60}U^{(3)}_{i,\tau,:}.
+\end{equation}
+Normalize the graph with self-loops:
+\begin{equation}
+\hat A_t=
+D_t^{-1}(\tilde A_t+I).
+\end{equation}
+Apply:
+\begin{equation}
+H^{(1)}
+=
+\operatorname{ReLU}
+(\hat A_tH^{(0)}W_g+\mathbf1b_g^\top)+H^{(0)}.
+\end{equation}
+Then:
+\begin{equation}
+s_t=w^\top\operatorname{Dropout}(H^{(1)})+b.
+\end{equation}
+Train by minimizing:
+\begin{equation}
+\mathcal L
+=
+\operatorname{MSE}(s,\tilde y)
++
+2(1-\overline{\rho}_{CS}).
+\end{equation}
+For each test date, rank $s_t$, construct the top/bottom ten-percent tranche, execute with one-session lag, and evaluate the $H$-session forward return. Finally calculate rank IC, ICIR, HAC statistics, portfolio Sharpe, annualized return, volatility, turnover, drawdown, bootstrap intervals, PSR, permutation $p$-values, and Holm-adjusted IC probabilities.
+
+\section{Primary Configuration}
+
+\begin{table}[tbp]
+\centering
+\caption{Exact primary configuration recorded in the development run.}
+\begin{tabular}{ll}
+\toprule
+Parameter & Value\\
+\midrule
+Universe & Multi-asset ETF universe\\
+Sequence length & 60\\
+Number of graph neighbours & 10\\
+Hidden width & 32\\
+Dropout & 0.5\\
+Batch size & 32 dates\\
+Maximum epochs & 15\\
+Early stopping patience & 3\\
+Seed ensemble & 5\\
+Learning rate & $10^{-3}$\\
+Weight decay & $10^{-3}$\\
+Input noise standard deviation & 0.1\\
+Correlation-loss weight & 2\\
+Horizons & 10, 20, 60 sessions\\
+Training window & 1,008 sessions\\
+Walk-forward step & 126 sessions\\
+Validation fraction & 20\%\\
+Execution lag & 1 session\\
+Long/short tail & 10\% / 10\%\\
+Transaction cost & 5 bps\\
+Annual short borrow & 50 bps\\
+Bootstrap draws & 2,000\\
+Permutation draws & 1,000\\
+Random seed & 42\\
+Holdout boundary & 2023-01-01\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Software and Data Manifest}
+
+The recorded computational environment is Python 3.13.15 on Linux 6.6.122, NumPy 2.1.3, pandas 2.2.3, SciPy 1.16.3, PyTorch 2.11.0+cu128, yfinance 0.2.66, and Matplotlib 3.10.0. The manifest records data hash \texttt{ec4bb0bf190e185e}. The run was created on 21 September 2026 at 08:43:52.
+
+\section{Figure Reading Guide}
+
+The cumulative-return figure answers the question of how the strategy's realized capital trajectory evolved. The Sharpe forest plot answers how the estimated risk-adjusted performance compares across configurations while displaying uncertainty. The cost-sensitivity figure asks how much of the result survives when execution friction is increased. The annual and rolling IC figures ask whether the predictive relationship is temporally stable. The decile figure asks whether the score contains information throughout the cross-section rather than only at its extremes. The permutation figure asks whether the portfolio statistic is unusual under a within-date exchangeability null. Together, these figures are intended to prevent the results section from relying on a single summary number.
+
+\begin{thebibliography}{99}
+
+\bibitem{jegadeesh1993}
+N. Jegadeesh and S. Titman, ``Returns to Buying Winners and Selling Losers: Implications for Stock Market Efficiency,'' \emph{The Journal of Finance}, vol. 48, no. 1, pp. 65--91, 1993. doi:10.1111/j.1540-6261.1993.tb04702.x.
+
+\bibitem{gu2020}
+S. Gu, B. Kelly, and D. Xiu, ``Empirical Asset Pricing via Machine Learning,'' \emph{The Review of Financial Studies}, vol. 33, no. 5, pp. 2223--2273, 2020. doi:10.1093/rfs/hhaa009.
+
+\bibitem{bai2018}
+S. Bai, J. Z. Kolter, and V. Koltun, ``An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling,'' arXiv:1803.01271, 2018. doi:10.48550/arXiv.1803.01271.
+
+\bibitem{kipf2017}
+T. N. Kipf and M. Welling, ``Semi-Supervised Classification with Graph Convolutional Networks,'' in \emph{International Conference on Learning Representations}, 2017. Available: https://arxiv.org/abs/1609.02907.
+
+\bibitem{neweywest1987}
+W. K. Newey and K. D. West, ``A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix,'' \emph{Econometrica}, vol. 55, no. 3, pp. 703--708, 1987. doi:10.2307/1913610.
+
+\bibitem{politisromano1994}
+D. N. Politis and J. P. Romano, ``The Stationary Bootstrap,'' \emph{Journal of the American Statistical Association}, vol. 89, no. 428, pp. 1303--1313, 1994. doi:10.1080/01621459.1994.10476870.
+
+\bibitem{holm1979}
+S. Holm, ``A Simple Sequentially Rejective Multiple Test Procedure,'' \emph{Scandinavian Journal of Statistics}, vol. 6, no. 2, pp. 65--70, 1979. doi:10.2307/4615733.
+
+\bibitem{bailey2012}
+D. H. Bailey and M. Lopez de Prado, ``The Sharpe Ratio Efficient Frontier,'' \emph{Journal of Risk}, vol. 15, no. 2, pp. 13--27, 2012.
+
+\bibitem{bailey2017}
+D. H. Bailey, J. Borwein, M. Lopez de Prado, and Q. J. Zhu, ``The Probability of Backtest Overfitting,'' \emph{Journal of Computational Finance}, vol. 20, no. 4, pp. 39--69, 2017. doi:10.21314/JCF.2016.322.
+
+\bibitem{yfinance}
+R. Aroussi, ``yfinance: Download Market Data from Yahoo! Finance's API,'' open-source Python library, 2026. Available: https://github.com/ranaroussi/yfinance.
+
+\bibitem{fama1992}
+E. F. Fama and K. R. French, ``The Cross-Section of Expected Stock Returns,'' \emph{The Journal of Finance}, vol. 47, no. 2, pp. 427--465, 1992. doi:10.1111/j.1540-6261.1992.tb04398.x.
+
+\bibitem{fama1993}
+E. F. Fama and K. R. French, ``Common Risk Factors in the Returns on Stocks and Bonds,'' \emph{Journal of Financial Economics}, vol. 33, no. 1, pp. 3--56, 1993. doi:10.1016/0304-405X(93)90023-5.
+
+\bibitem{harvey2016}
+C. R. Harvey, Y. Liu, and H. Zhu, ``... and the Cross-Section of Expected Returns,'' \emph{The Review of Financial Studies}, vol. 29, no. 1, pp. 5--68, 2016. doi:10.1093/rfs/hhv059.
+
+\bibitem{feng2020}
+G. Feng, S. Giglio, and D. Xiu, ``Taming the Factor Zoo: A Test of New Factors,'' \emph{The Journal of Finance}, vol. 75, no. 3, pp. 1327--1370, 2020. doi:10.1111/jofi.12883.
+
+\bibitem{demiguel2020}
+V. DeMiguel, A. Martin-Utrera, and R. Uppal, ``A Transaction-Cost Perspective on the Multitude of Firm Characteristics,'' \emph{The Review of Financial Studies}, vol. 33, no. 5, pp. 2180--2222, 2020. doi:10.1093/rfs/hhz085.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,2 @@
+n_assets,n_dates,first,last,n_sectors,ew_ann_ret,ew_ann_vol,ew_sharpe,stage,holdout_start
+56,3657,2008-06-24,2022-12-30,7,0.05095083266496658,0.14392768555897364,0.354002993866845,dev,2023-01-01
