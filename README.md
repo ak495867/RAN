@@ -1,6 +1,6 @@
 # RAN - Relational Asset Network
 
-[![Paper](https://img.shields.io/badge/Paper-PDF-8A2BE2?style=for-the-badge&logo=readdotcv&logoColor=white)](https://github.com/ak495867/RAN/blob/main/PAPER/RAN.pdf)
+[![Paper](https://img.shields.io/badge/Paper-PDF-8A2BE2?style=for-the-badge&logo=readdotcv&logoColor=white)](https://github.com/ak495867/RAN/PAPER/RAN.pdf)
 [![GitHub last commit](https://img.shields.io/github/last-commit/ak495867/HPT-DTE-CAFP?style=for-the-badge)](https://github.com/ak495867/HPT-DTE-CAFP/commits/main)
 [![GitHub repo size](https://img.shields.io/github/repo-size/ak495867/HPT-DTE-CAFP?style=for-the-badge)](https://github.com/ak495867/HPT-DTE-CAFP)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
