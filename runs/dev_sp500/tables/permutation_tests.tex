@@ -1,0 +1,28 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Within-day permutation test on non-overlapping rebalances (median p over start offsets).}
+\label{tab:permutation_tests}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrr}
+\toprule
+horizon & model & gross\_sharpe & p\_median & p\_by\_offset \\
+\midrule
+10 & RAN (CNN+GCN) & 0.563 & 0.026 & 0.026, 0.009, 0.042 \\
+10 & RAN w/o graph & 0.604 & 0.017 & 0.017, 0.003, 0.024 \\
+10 & Ridge & 0.459 & 0.061 & 0.035, 0.108, 0.061 \\
+10 & Momentum (120-20d) & -0.119 & 0.673 & 0.692, 0.673, 0.631 \\
+10 & Reversal (5d) & 0.168 & 0.289 & 0.289, 0.307, 0.029 \\
+20 & RAN (CNN+GCN) & 0.532 & 0.025 & 0.025, 0.060, 0.025 \\
+20 & RAN w/o graph & 0.516 & 0.029 & 0.027, 0.089, 0.029 \\
+20 & Ridge & 0.427 & 0.064 & 0.070, 0.042, 0.064 \\
+20 & Momentum (120-20d) & -0.114 & 0.609 & 0.609, 0.920, 0.503 \\
+20 & Reversal (5d) & 0.241 & 0.194 & 0.408, 0.028, 0.194 \\
+60 & RAN (CNN+GCN) & 0.453 & 0.061 & 0.060, 0.353, 0.061 \\
+60 & RAN w/o graph & 0.504 & 0.045 & 0.037, 0.250, 0.045 \\
+60 & Ridge & 0.555 & 0.031 & 0.031, 0.071, 0.010 \\
+60 & Momentum (120-20d) & -0.069 & 0.600 & 0.600, 0.786, 0.418 \\
+60 & Reversal (5d) & 0.426 & 0.071 & 0.071, 0.207, 0.020 \\
+\bottomrule
+\end{tabular}}
+\end{table}

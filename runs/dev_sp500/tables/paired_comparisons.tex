@@ -1,0 +1,25 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Paired stationary-bootstrap differences (RAN minus comparator); p = bootstrap P(diff <= 0).}
+\label{tab:paired_comparisons}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrrrrr}
+\toprule
+horizon & comparison & d\_ic & d\_ic\_lo & d\_ic\_hi & p\_ic & d\_sharpe & d\_sh\_lo & d\_sh\_hi & p\_sh \\
+\midrule
+10 & RAN - RAN w/o graph & 0.001 & -0.005 & 0.006 & 0.416 & -0.060 & -0.167 & 0.042 & 0.878 \\
+10 & RAN - Ridge & 0.002 & -0.014 & 0.018 & 0.435 & 0.251 & -0.179 & 0.688 & 0.131 \\
+10 & RAN - Momentum (120-20d) & 0.018 & -0.008 & 0.044 & 0.095 & 0.722 & 0.051 & 1.381 & 0.018 \\
+10 & RAN - Reversal (5d) & 0.003 & -0.016 & 0.023 & 0.372 & 0.495 & 0.000 & 0.997 & 0.025 \\
+20 & RAN - RAN w/o graph & 0.003 & -0.004 & 0.010 & 0.204 & 0.035 & -0.081 & 0.158 & 0.283 \\
+20 & RAN - Ridge & -0.005 & -0.027 & 0.020 & 0.646 & 0.013 & -0.447 & 0.449 & 0.485 \\
+20 & RAN - Momentum (120-20d) & 0.023 & -0.012 & 0.056 & 0.105 & 0.633 & -0.036 & 1.246 & 0.030 \\
+20 & RAN - Reversal (5d) & 0.003 & -0.024 & 0.029 & 0.397 & 0.267 & -0.229 & 0.739 & 0.135 \\
+60 & RAN - RAN w/o graph & -0.003 & -0.014 & 0.006 & 0.659 & -0.066 & -0.166 & 0.015 & 0.934 \\
+60 & RAN - Ridge & -0.025 & -0.047 & -0.003 & 0.987 & -0.251 & -0.455 & -0.042 & 0.990 \\
+60 & RAN - Momentum (120-20d) & 0.022 & -0.027 & 0.068 & 0.186 & 0.300 & -0.180 & 0.815 & 0.126 \\
+60 & RAN - Reversal (5d) & -0.006 & -0.041 & 0.025 & 0.640 & 0.079 & -0.259 & 0.445 & 0.337 \\
+\bottomrule
+\end{tabular}}
+\end{table}

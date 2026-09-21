@@ -1,0 +1,58 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Performance by market-stress episode (entry-date windows).}
+\label{tab:stress_episodes}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrr}
+\toprule
+horizon & model & episode & rank\_ic & ann\_net\_ret & n\_rows \\
+\midrule
+10 & RAN (CNN+GCN) & Euro crisis (Jul-Dec 2011) & -0.058 & -0.083 & 127 \\
+10 & RAN (CNN+GCN) & Aug-2015 / Feb-2016 stress & -0.025 & -0.079 & 145 \\
+10 & RAN (CNN+GCN) & Q4-2018 sell-off & -0.060 & -0.189 & 63 \\
+10 & RAN (CNN+GCN) & COVID crash (Feb-Apr 2020) & 0.010 & 0.072 & 52 \\
+10 & RAN (CNN+GCN) & 2022 rate-shock bear market & -0.006 & 0.003 & 240 \\
+10 & Ridge & Euro crisis (Jul-Dec 2011) & -0.008 & -0.050 & 127 \\
+10 & Ridge & Aug-2015 / Feb-2016 stress & 0.003 & -0.042 & 145 \\
+10 & Ridge & Q4-2018 sell-off & -0.010 & -0.093 & 63 \\
+10 & Ridge & COVID crash (Feb-Apr 2020) & -0.115 & -0.430 & 52 \\
+10 & Ridge & 2022 rate-shock bear market & -0.013 & 0.008 & 240 \\
+10 & Momentum (120-20d) & Euro crisis (Jul-Dec 2011) & 0.004 & -0.063 & 127 \\
+10 & Momentum (120-20d) & Aug-2015 / Feb-2016 stress & 0.001 & -0.055 & 145 \\
+10 & Momentum (120-20d) & Q4-2018 sell-off & 0.014 & -0.025 & 63 \\
+10 & Momentum (120-20d) & COVID crash (Feb-Apr 2020) & -0.010 & -0.110 & 52 \\
+10 & Momentum (120-20d) & 2022 rate-shock bear market & 0.025 & 0.066 & 240 \\
+20 & RAN (CNN+GCN) & Euro crisis (Jul-Dec 2011) & -0.145 & -0.220 & 127 \\
+20 & RAN (CNN+GCN) & Aug-2015 / Feb-2016 stress & -0.024 & -0.076 & 145 \\
+20 & RAN (CNN+GCN) & Q4-2018 sell-off & -0.029 & -0.098 & 63 \\
+20 & RAN (CNN+GCN) & COVID crash (Feb-Apr 2020) & 0.108 & 0.288 & 52 \\
+20 & RAN (CNN+GCN) & 2022 rate-shock bear market & -0.031 & -0.034 & 230 \\
+20 & Ridge & Euro crisis (Jul-Dec 2011) & -0.017 & 0.007 & 127 \\
+20 & Ridge & Aug-2015 / Feb-2016 stress & -0.001 & -0.026 & 145 \\
+20 & Ridge & Q4-2018 sell-off & 0.017 & -0.051 & 63 \\
+20 & Ridge & COVID crash (Feb-Apr 2020) & -0.044 & -0.166 & 52 \\
+20 & Ridge & 2022 rate-shock bear market & -0.014 & 0.028 & 230 \\
+20 & Momentum (120-20d) & Euro crisis (Jul-Dec 2011) & -0.014 & -0.097 & 127 \\
+20 & Momentum (120-20d) & Aug-2015 / Feb-2016 stress & 0.016 & -0.031 & 145 \\
+20 & Momentum (120-20d) & Q4-2018 sell-off & -0.027 & -0.085 & 63 \\
+20 & Momentum (120-20d) & COVID crash (Feb-Apr 2020) & -0.004 & -0.121 & 52 \\
+20 & Momentum (120-20d) & 2022 rate-shock bear market & 0.031 & 0.075 & 230 \\
+60 & RAN (CNN+GCN) & Euro crisis (Jul-Dec 2011) & -0.005 & 0.060 & 127 \\
+60 & RAN (CNN+GCN) & Aug-2015 / Feb-2016 stress & -0.111 & -0.095 & 145 \\
+60 & RAN (CNN+GCN) & Q4-2018 sell-off & 0.086 & 0.047 & 63 \\
+60 & RAN (CNN+GCN) & COVID crash (Feb-Apr 2020) & 0.279 & 0.403 & 52 \\
+60 & RAN (CNN+GCN) & 2022 rate-shock bear market & 0.013 & 0.023 & 190 \\
+60 & Ridge & Euro crisis (Jul-Dec 2011) & 0.127 & 0.138 & 127 \\
+60 & Ridge & Aug-2015 / Feb-2016 stress & -0.044 & -0.031 & 145 \\
+60 & Ridge & Q4-2018 sell-off & 0.109 & 0.055 & 63 \\
+60 & Ridge & COVID crash (Feb-Apr 2020) & 0.115 & 0.130 & 52 \\
+60 & Ridge & 2022 rate-shock bear market & -0.051 & -0.039 & 190 \\
+60 & Momentum (120-20d) & Euro crisis (Jul-Dec 2011) & -0.144 & -0.151 & 127 \\
+60 & Momentum (120-20d) & Aug-2015 / Feb-2016 stress & 0.023 & -0.017 & 145 \\
+60 & Momentum (120-20d) & Q4-2018 sell-off & -0.115 & -0.118 & 63 \\
+60 & Momentum (120-20d) & COVID crash (Feb-Apr 2020) & 0.034 & -0.057 & 52 \\
+60 & Momentum (120-20d) & 2022 rate-shock bear market & 0.045 & 0.078 & 190 \\
+\bottomrule
+\end{tabular}}
+\end{table}
